@@ -1,0 +1,400 @@
+{
+  "updatedAt": "2026-02-25T20:04:51.299Z",
+  "createdAt": "2026-02-24T20:58:08.181Z",
+  "id": "YOUR_WORKFLOW_ID",
+  "name": "YourBrand Batch: Imágenes + Precios (OPERATIVO V5)",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ManualTrigger",
+      "name": "ManualTrigger",
+      "position": [
+        0,
+        144
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/logo2.jpeg",
+        "options": {
+          "dataPropertyName": "dataLogo"
+        }
+      },
+      "id": "CargarLogo",
+      "name": "CargarLogo",
+      "position": [
+        208,
+        144
+      ],
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "command": "find /data/your-photos-folder -mindepth 2 -type f -not -path \"*/.*\""
+      },
+      "id": "SO_FindFiles",
+      "name": "SO_FindFiles",
+      "position": [
+        400,
+        -48
+      ],
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json.stdout;\nif (!result) return [];\nconst lines = result.split('\\n').filter(l => l.trim() !== '');\nconst EXT = /\\.(jpg|jpeg|png|webp|gif)$/i;\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str).normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").toUpperCase().replace(/[^A-Z0-9]/g, '');\n}\n\nconst out = [];\nfor (const fullPath of lines) {\n  if (!EXT.test(fullPath)) continue;\n  \n  const parts = fullPath.split('/');\n  const fileName = parts.pop();\n  const categoryRaw = parts.pop();\n  \n  if (!categoryRaw) continue;\n  \n  const category = normalizeName(categoryRaw);\n  const baseName = fileName.replace(/\\.[^.]+$/i, '');\n  const matchKey = normalizeName(baseName);\n  const compositeKey = matchKey + '|' + category;\n  \n  out.push({ \n    json: { \n      path: fullPath, \n      fileName, \n      categoryRaw, \n      category, \n      matchKey, \n      compositeKey \n    } \n  });\n}\n\nreturn out;"
+      },
+      "id": "SO_ParsePaths",
+      "name": "SO_ParsePaths",
+      "position": [
+        656,
+        -48
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776"
+        },
+        "sheetName": {
+          "__regex": "https:\\/\\/docs\\.google\\.com\\/spreadsheets\\/d\\/[0-9a-zA-Z\\-_]+.*\\#gid=([0-9]+)",
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776"
+        },
+        "options": {}
+      },
+      "id": "GoogleSheets",
+      "name": "GoogleSheets",
+      "position": [
+        400,
+        304
+      ],
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wdFEKETdaDV8ZhiB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst cleaned = [];\n\nconst COL = { \n  codigo: 'CÓDIGO', \n  nombre: 'NOMBRE', \n  precioUsd: 'PRECIO USD', \n  precioCup: 'PRECIO CUP', \n  estado: 'ESTADO' \n};\n\nfunction safeNum(val) {\n  if (val === null || val === undefined) return null;\n  if (typeof val === 'number' && !Number.isNaN(val)) return val;\n  const s = String(val).replace(/[^0-9.,]/g, '').replace(',', '.');\n  const n = parseFloat(s);\n  return Number.isNaN(n) ? null : n;\n}\n\nfunction safeStr(val) {\n  if (val === null || val === undefined) return '';\n  return String(val).trim();\n}\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str).normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").toUpperCase().replace(/[^A-Z0-9]/g, '');\n}\n\nfunction isSectionHeader(codigo, nombre) {\n  const c = String(codigo).trim();\n  const n = safeStr(nombre);\n  return c.includes('---') || (!n && !c);\n}\n\nfunction sectionToCategory(codigo) {\n  const m = String(codigo).match(/---\\s*([^---]+)\\s*---/);\n  return m ? normalizeName(m[1]) : null;\n}\n\nlet currentCategory = '';\n\nfor (const item of items) {\n  const row = item.json || item;\n  \n  const codigoRaw = row[COL.codigo];\n  const nombre = safeStr(row[COL.nombre]);\n  const usd = safeNum(row[COL.precioUsd]);\n  const cup = safeNum(row[COL.precioCup]);\n  \n  if (isSectionHeader(codigoRaw, nombre)) {\n    const cat = sectionToCategory(codigoRaw);\n    if (cat) currentCategory = cat;\n    continue;\n  }\n  \n  if (!nombre) continue;\n  \n  const matchKey = normalizeName(nombre);\n  if (!matchKey) continue;\n  \n  const category = currentCategory || 'GENERAL';\n  const compositeKey = matchKey + '|' + category;\n  \n  cleaned.push({\n    json: {\n      matchKey,\n      category,\n      compositeKey,\n      codigo: codigoRaw,\n      productId: nombre,\n      usdPrice: usd,\n      cupPrice: cup,\n      usdFormatted: usd != null ? `$${Number(usd).toFixed(2)} USD` : '',\n      cupFormatted: cup != null ? `${Number(cup).toLocaleString('en-US')} CUP` : ''\n    }\n  });\n}\n\nreturn cleaned;"
+      },
+      "id": "CleanPricing",
+      "name": "CleanPricing",
+      "position": [
+        656,
+        304
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "matchKey",
+        "options": {}
+      },
+      "id": "MergeData",
+      "name": "MergeData",
+      "position": [
+        960,
+        144
+      ],
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "LoopNode",
+      "name": "LoopNode",
+      "position": [
+        1200,
+        144
+      ],
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.path }}",
+        "options": {
+          "dataPropertyName": "dataProducto"
+        }
+      },
+      "id": "LoadProductImage",
+      "name": "LoadProductImage",
+      "position": [
+        1456,
+        64
+      ],
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-flash-latest",
+          "mode": "list",
+          "cachedResultName": "models/gemini-flash-latest"
+        },
+        "text": "=Eres el copywriter de Your Brand, una tienda cubana de productos variados. Genera UN slogan publicitario corto (maximo 10 palabras) viendo EXCLUSIVAMENTE esta imagen de nuestro nuevo producto junto a sus datos.\\n\\nProducto: {{ $('LoopNode').first().json.productId }}\\nCategoría: {{ $('LoopNode').first().json.categoryRaw || 'General' }}\\nPrecio: {{ $('LoopNode').first().json.cupPrice }} CUP\\n\\nReglas:\\n- En español cubano o neutro.\\n- Usa 1-2 emojis relevantes a lo que ves en la imagen.\\n- Cero comillas, cero explicaciones.\\n- Solo el slogan directo.",
+        "inputType": "binary",
+        "binaryPropertyName": "dataProducto",
+        "options": {}
+      },
+      "id": "GenerarCopy",
+      "name": "GenerarCopy",
+      "position": [
+        1616,
+        64
+      ],
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "SpJaeBzJ527901zx",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst originalData = $('LoopNode').first().json;\n\n// Gemini's text output might be nested since we removed the simplify restriction\n// We try different possible paths just in case to avoid 'undefined'\nconst geminiData = $input.first().json;\nlet geminiText = '🚨 Visítanos antes que se agoten 🚨';\n\nif (geminiData.content && geminiData.content.parts && geminiData.content.parts.length > 0) {\n    geminiText = geminiData.content.parts[0].text;\n} else if (geminiData.text) {\n    geminiText = geminiData.text;\n} else if (geminiData.message && geminiData.message.content) {\n    geminiText = geminiData.message.content;\n}\n\nconst productoPath = originalData.path;\nconst logoPath = '/data/logo2.jpeg';\n\nif (!productoPath) {\n  throw new Error('path is missing from LoopNode. Keys: ' + JSON.stringify(Object.keys(originalData)));\n}\n\nconst productoBuffer = fs.readFileSync(productoPath);\nconst logoBuffer = fs.readFileSync(logoPath);\n\nconst ext = productoPath.split('.').pop().toLowerCase();\nconst mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };\nconst productoMime = mimeMap[ext] || 'image/jpeg';\n\nreturn [{\n  json: {\n    ...originalData,\n    logoBase64: logoBuffer.toString('base64'),\n    logoMime: 'image/jpeg',\n    productoBase64: productoBuffer.toString('base64'),\n    productoMime,\n    copyText: geminiText\n  }\n}];"
+      },
+      "id": "PrepareBase64",
+      "name": "PrepareBase64",
+      "position": [
+        1792,
+        64
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "html": "=<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n    <meta charset=\"UTF-8\">\n    <style>\n        * { margin: 0; padding: 0; box-sizing: border-box; }\n        body, html {\n            width: 1080px;\n            height: 1080px;\n            overflow: hidden;\n            background: linear-gradient(170deg, #6d1e68 0%, #4a1547 100%);\n            font-family: 'Arial Black', 'Arial Bold', Arial, sans-serif;\n        }\n        .layout { width: 1080px; height: 1080px; display: flex; flex-direction: column; }\n        \n        .header { height: 180px; display: flex; align-items: center; padding: 0 55px; justify-content: flex-start; }\n        .logo { height: 130px; width: 130px; object-fit: cover; border-radius: 50%; box-shadow: 0px 8px 15px rgba(0,0,0,0.5); }\n\n        .product-zone { \n            flex: 1; \n            display: flex; \n            justify-content: center; \n            align-items: center; \n            padding: 10px 40px; \n        }\n        \n        .product-img { \n            width: 100%; \n            height: 100%; \n            max-height: 560px; /* Reducimos 40px aquí para darle más espacio al info-zone de abajo */\n            object-fit: contain; \n            filter: drop-shadow(0px 15px 25px rgba(0,0,0,0.4));\n        }\n\n        .info-zone { \n            height: 340px; /* Aumentado 40px para más aire */\n            background: #ffffff; \n            border-top: 6px solid #6d1e68; \n            padding: 30px 40px; \n            display: flex; \n            flex-direction: column; \n            justify-content: center; \n            align-items: center; \n            gap: 25px; /* AUMENTO SIGNIFICATIVO DEL GAP (Separación entre lineas) */\n            text-align: center;\n        }\n        \n        .product-name { \n            font-size: 38px; \n            font-weight: 800; \n            color: #222222; \n            text-transform: uppercase; \n            line-height: 1.1; \n            letter-spacing: 0.5px;\n        }\n        \n        .price-row { \n            display: flex; \n            align-items: baseline; \n            justify-content: center; \n            gap: 15px; \n        }\n        \n        /* Precios en unaSola linea unificados en tamaño */\n        .price-val { font-size: 55px; font-weight: 800; color: #e87b04; line-height: 1; letter-spacing: -1px; }\n        .price-separator { font-size: 50px; font-weight: 300; color: #aaaaaa; margin: 0 5px; }\n        \n        /* Uso fuente especial para emojis si es necesario */\n        .cta { \n            font-size: 26px; \n            font-weight: 800; \n            background: linear-gradient(90deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C);\n            -webkit-background-clip: text;\n            -webkit-text-fill-color: transparent;\n            background-clip: text;\n            text-transform: uppercase; \n            letter-spacing: 0.5px; \n            line-height: 1.2; \n            padding: 0 10px;\n            font-family: 'Arial Black', \"Noto Color Emoji\", sans-serif;\n        }\n    </style>\n</head>\n<body>\n    <div class=\"layout\">\n        <div class=\"header\">\n            <img src=\"data:{{ $json.logoMime }};base64,{{ $json.logoBase64 }}\" class=\"logo\" />\n        </div>\n        <div class=\"product-zone\">\n            <img src=\"data:{{ $json.productoMime }};base64,{{ $json.productoBase64 }}\" class=\"product-img\" />\n        </div>\n        <div class=\"info-zone\">\n            <div class=\"product-name\">{{ $json.productId }}</div>\n            <div class=\"price-row\">\n                <span class=\"price-val\">{{ $json.cupPrice }} CUP</span>\n                <span class=\"price-separator\">/</span>\n                <span class=\"price-val\">{{ $json.usdPrice }} USD</span>\n            </div>\n            <div class=\"cta\">{{ $json.copyText }}</div>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "RenderHTML",
+      "name": "RenderHTML",
+      "position": [
+        2000,
+        64
+      ],
+      "type": "n8n-nodes-html2image.html2image",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/fotosProcesadas/{{ $json.categoryRaw || 'Resultados' }}/{{ $json.fileName }}",
+        "options": {}
+      },
+      "id": "SaveResult",
+      "name": "SaveResult",
+      "position": [
+        2304,
+        80
+      ],
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "CargarLogo": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "GoogleSheets",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "SO_FindFiles",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "CleanPricing": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "MergeData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "GenerarCopy": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "PrepareBase64",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "GoogleSheets": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "CleanPricing",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "LoadProductImage": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "GenerarCopy",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "LoopNode": {
+      "main": [
+        [],
+        [
+          {
+            "index": 0,
+            "node": "LoadProductImage",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "ManualTrigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "CargarLogo",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "MergeData": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "LoopNode",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "PrepareBase64": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "RenderHTML",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "RenderHTML": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "SaveResult",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SO_FindFiles": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "SO_ParsePaths",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SO_ParsePaths": {
+      "main": [
+        [
+          {
+            "index": 1,
+            "node": "MergeData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SaveResult": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "LoopNode",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "61f3b776-40d5-49fb-980e-2e7fa47bf09a",
+  "activeVersionId": null,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-02-24T20:58:08.181Z",
+      "createdAt": "2026-02-24T20:58:08.181Z",
+      "role": "workflow:owner",
+      "workflowId": "YOUR_WORKFLOW_ID",
+      "projectId": "wrAcVFBjHe5KMnRw"
+    }
+  ],
+  "activeVersion": null,
+  "tags": []
+}

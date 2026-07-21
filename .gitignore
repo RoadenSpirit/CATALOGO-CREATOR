@@ -1,0 +1,39 @@
+node_modules/
+.env
+binaryData/
+storage/
+*.log
+final_payload.json
+ultimo_error.json
+ultimo_input_recibido.json
+workflow_update_*.json
+cache_pendientes.json
+package-lock.json
+
+# Ignorar carpetas de imágenes y datos pesados para GitHub
+your-photos-folder/
+fotosProcesadas/
+fotosSeleccionadas/
+yourdulceria/
+upsacale/
+your-photos-folder - copia/
+
+# Ignorar imágenes sueltas en la raíz
+*.jpg
+*.jpeg
+*.png
+*.gif
+
+# Documentos
+*.xlsx
+*.docx
+
+# Bases de datos y volcados pesados
+*.sql
+
+# Archivos de la CLI de Gemini
+gemini/
+gemini.bat
+gemini.ps1
+.agents/
+.gemini/

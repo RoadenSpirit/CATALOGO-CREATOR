@@ -1,0 +1,373 @@
+{
+  "name": "YourBrand Batch: Imágenes + Precios (OPTIMIZADO V1 - PRODUCCIÓN d13ce5a)",
+  "description": null,
+  "nodes": [
+    {
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [
+        0,
+        144
+      ],
+      "typeVersion": 1,
+      "parameters": {},
+      "name": "ManualTrigger"
+    },
+    {
+      "position": [
+        208,
+        144
+      ],
+      "name": "CargarLogo",
+      "parameters": {
+        "fileSelector": "/data/logo2.jpeg",
+        "options": {
+          "dataPropertyName": "dataLogo"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "command": "find /data/your-photos-folder -mindepth 2 -type f -not -path \"*/.*\""
+      },
+      "name": "SO_FindFiles",
+      "position": [
+        400,
+        -48
+      ],
+      "typeVersion": 1,
+      "type": "n8n-nodes-base.executeCommand"
+    },
+    {
+      "position": [
+        656,
+        -48
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const result = $input.first().json.stdout;\nif (!result) return [];\nconst lines = result.split('\\n').filter(l => l.trim() !== '');\nconst EXT = /\\.(jpg|jpeg|png|webp|gif)$/i;\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str).normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").toUpperCase().replace(/[^A-Z0-9]/g, '');\n}\n\nconst out = [];\nfor (const fullPath of lines) {\n  if (!EXT.test(fullPath)) continue;\n  \n  const parts = fullPath.split('/');\n  const fileName = parts.pop();\n  const categoryRaw = parts.pop();\n  \n  if (!categoryRaw) continue;\n  \n  const category = normalizeName(categoryRaw);\n  const baseName = fileName.replace(/\\.[^.]+$/i, '');\n  const matchKey = normalizeName(baseName);\n  const compositeKey = matchKey + '|' + category;\n  \n  out.push({ \n    json: { \n      path: fullPath, \n      fileName, \n      categoryRaw, \n      category, \n      matchKey, \n      compositeKey \n    } \n  });\n}\n\nreturn out;"
+      },
+      "name": "SO_ParsePaths",
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "position": [
+        400,
+        304
+      ],
+      "name": "GoogleSheets",
+      "parameters": {
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "__regex": "https:\\/\\/docs\\.google\\.com\\/spreadsheets\\/d\\/[0-9a-zA-Z\\-_]+.*\\#gid=([0-9]+)",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776"
+        },
+        "documentId": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776",
+          "__rl": true,
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "position": [
+        656,
+        304
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst cleaned = [];\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n}\n\nconst formatUsd = (val) => '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD';\nconst formatCup = (val) => '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' CUP';\n\nfor (const item of items) {\n  const row = item.json;\n  const nombre = row['PRODUCTO'] ? String(row['PRODUCTO']).trim() : '';\n  if (!nombre) continue;\n\n  const actualUsd = parseFloat(row['ACTUAL USD']) || 0;\n  const actualCup = parseFloat(row['ACTUAL CUP']) || 0;\n  const maxUsd = parseFloat(row['MAX HIST USD']) || 0;\n  const maxCup = parseFloat(row['MAX HIST CUP']) || 0;\n\n  // Lógica de Descuento: Evaluamos ambas monedas\n  const hasDiscount = (maxUsd > actualUsd) && (maxCup > actualCup);\n\n  let discountData = {};\n  if (hasDiscount) {\n      const diffUsd = maxUsd - actualUsd;\n      const diffCup = maxCup - actualCup;\n      discountData = {\n          maxUsdFormatted: formatUsd(maxUsd),\n          maxCupFormatted: formatCup(maxCup),\n          diffUsdFormatted: formatUsd(diffUsd),\n          diffCupFormatted: formatCup(diffCup)\n      };\n  }\n\n  // Soporte para nueva estructura de categorías\n  const categoryRaw = row['CATEGORIA_AUTO'] || row['CATEGORIA'] || 'General';\n\n  cleaned.push({\n    json: {\n      matchKey: normalizeName(nombre),\n      productId: nombre,\n      usdPrice: actualUsd,\n      cupPrice: actualCup,\n      usdFormatted: formatUsd(actualUsd),\n      cupFormatted: formatCup(actualCup),\n      hasDiscount: hasDiscount,\n      ...discountData,\n      categoryRaw: categoryRaw\n    }\n  });\n}\nreturn cleaned;"
+      },
+      "name": "CleanPricing"
+    },
+    {
+      "typeVersion": 3,
+      "position": [
+        960,
+        144
+      ],
+      "name": "MergeData",
+      "parameters": {
+        "options": {
+          "outputUnmatched": true
+        },
+        "fieldsToMatchString": "matchKey",
+        "mode": "combine"
+      },
+      "type": "n8n-nodes-base.merge"
+    },
+    {
+      "typeVersion": 3,
+      "position": [
+        1650,
+        144
+      ],
+      "type": "n8n-nodes-base.splitInBatches",
+      "name": "LoopNode",
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "typeVersion": 1,
+      "parameters": {
+        "parameters": {
+          "parameter": [
+            {
+              "name": "marca",
+              "value": "yourbrand"
+            },
+            {
+              "name": "logoPath",
+              "value": "/data/logo2.jpeg"
+            },
+            {
+              "value": "={{ $('LoopNode').item.json.path }}",
+              "name": "productoPath"
+            },
+            {
+              "value": "=/data/fotosProcesadas/{{ $('LoopNode').item.json.categoryRaw || 'Resultados' }}/{{ $('LoopNode').item.json.fileName }}",
+              "name": "destinoPath"
+            },
+            {
+              "name": "productId",
+              "value": "={{ $('LoopNode').item.json.productId }}"
+            },
+            {
+              "name": "usdPrice",
+              "value": "={{ $('LoopNode').item.json.usdFormatted }}"
+            },
+            {
+              "name": "cupPrice",
+              "value": "={{ $('LoopNode').item.json.cupFormatted }}"
+            },
+            {
+              "name": "copyText",
+              "value": "🚨 Visítanos antes que se agoten 🚨"
+            },
+            {
+              "value": "={{ $json.hasDiscount }}",
+              "name": "hasDiscount"
+            },
+            {
+              "name": "maxUsdFormatted",
+              "value": "={{ $json.maxUsdFormatted }}"
+            },
+            {
+              "value": "={{ $json.maxCupFormatted }}",
+              "name": "maxCupFormatted"
+            },
+            {
+              "name": "diffUsdFormatted",
+              "value": "={{ $json.diffUsdFormatted }}"
+            },
+            {
+              "name": "diffCupFormatted",
+              "value": "={{ $json.diffCupFormatted }}"
+            }
+          ]
+        },
+        "mode": "parameter",
+        "workflowId": {
+          "value": "Motor Render Universal (Sub-Workflow)",
+          "mode": "name",
+          "__rl": true
+        },
+        "options": {
+          "waitForSubworkflow": true
+        }
+      },
+      "name": "ExecuteRenderMotor",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "position": [
+        2280,
+        64
+      ]
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "name": "FuzzyMatchCode",
+      "parameters": {
+        "jsCode": "function levenshtein(a, b) {\n  if (a.length === 0) return b.length;\n  if (b.length === 0) return a.length;\n  const matrix = [];\n  for (let i = 0; i <= b.length; i++) { matrix[i] = [i]; }\n  for (let j = 0; j <= a.length; j++) { matrix[0][j] = j; }\n  for (let i = 1; i <= b.length; i++) {\n    for (let j = 1; j <= a.length; j++) {\n      if (b.charAt(i - 1) === a.charAt(j - 1)) {\n        matrix[i][j] = matrix[i - 1][j - 1];\n      } else {\n        matrix[i][j] = Math.min(\n          matrix[i - 1][j - 1] + 1,\n          Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)\n        );\n      }\n    }\n  }\n  return matrix[b.length][a.length];\n}\n\nconst unmatchedFiles = $input.all();\nif (!unmatchedFiles || unmatchedFiles.length === 0) return [];\n\nconst allProducts = $node[\"CleanPricing\"].all();\nconst recovered = [];\n\nfor (const file of unmatchedFiles) {\n  const fileKey = file.json.matchKey || \"\";\n  if (!fileKey) continue;\n  \n  let bestMatch = null;\n  let bestSimilarity = 0;\n\n  for (const product of allProducts) {\n    const prodKey = product.json.matchKey || \"\";\n    if (!prodKey) continue;\n    \n    const distance = levenshtein(fileKey, prodKey);\n    const maxLength = Math.max(fileKey.length, prodKey.length);\n    const similarity = maxLength === 0 ? 1 : (maxLength - distance) / maxLength;\n\n    if (similarity >= 0.8 && similarity > bestSimilarity) {\n      bestSimilarity = similarity;\n      bestMatch = product.json;\n    }\n  }\n\n  if (bestMatch) {\n    recovered.push({\n      json: {\n        ...bestMatch,\n        path: file.json.path,\n        fileName: file.json.fileName,\n        categoryRaw: file.json.categoryRaw\n      }\n    });\n  }\n}\n\nreturn recovered;"
+      },
+      "typeVersion": 2,
+      "position": [
+        1200,
+        320
+      ]
+    },
+    {
+      "name": "UnionResultados",
+      "position": [
+        1450,
+        144
+      ],
+      "typeVersion": 3,
+      "type": "n8n-nodes-base.merge",
+      "parameters": {
+        "mode": "append"
+      }
+    }
+  ],
+  "connections": {
+    "SO_ParsePaths": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "node": "MergeData",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "ManualTrigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "CargarLogo",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "CleanPricing": {
+      "main": [
+        [
+          {
+            "node": "MergeData",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ExecuteRenderMotor": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "LoopNode",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "GoogleSheets": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "node": "CleanPricing",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CargarLogo": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "node": "GoogleSheets",
+            "index": 0
+          },
+          {
+            "node": "SO_FindFiles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MergeData": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "node": "UnionResultados",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "type": "main",
+            "node": "FuzzyMatchCode",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UnionResultados": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "node": "LoopNode",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FuzzyMatchCode": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 1,
+            "node": "UnionResultados"
+          }
+        ]
+      ]
+    },
+    "LoopNode": {
+      "main": [
+        [],
+        [
+          {
+            "node": "ExecuteRenderMotor",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SO_FindFiles": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "SO_ParsePaths"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": null,
+  "versionCounter": 2,
+  "tags": []
+}

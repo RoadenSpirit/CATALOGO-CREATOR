@@ -1,0 +1,629 @@
+{
+  "updatedAt": "2026-02-25T21:00:51.179Z",
+  "createdAt": "2026-02-25T19:57:54.936Z",
+  "id": "mNrplRMpwkiL3S4G",
+  "name": "Controlador de Publicaciones YourBrand (Producción Fix)",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "3adcae40-0f0a-49e2-8adc-cb011afea6f5",
+      "name": "1. Sincronizar (Cada Hora)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        800,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1o2JNhZbJtPXcg41YcG5_BKkhEB0nfse5JVZ62k_5Y6Q",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Inventario",
+          "mode": "list"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "ESTADO PUBLICACIÓN",
+              "lookupValue": "PUBLICADO"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0942d3a5-caaa-4bd9-8873-f2e58b0a4327",
+      "name": "Leer Google Sheets (Pendientes)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1008,
+        80
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wdFEKETdaDV8ZhiB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst cachePath = '/data/cache_pendientes.json';\nconst productos = [];\n\nfor (const item of $input.all()) {\n    const data = item.json;\n    \n    const rawCat = data['CATEGORÍA'] || '';\n    const cat = rawCat ? rawCat.charAt(0).toUpperCase() + rawCat.slice(1).toLowerCase() : 'SinCategoria';\n    const name = data['NOMBRE'] || '';\n    \n    const basePath = `/data/your-photos-folder/${cat}/${name}`;\n    const extensions = ['.jpg', '.png', '.jpeg', '.JPG', '.PNG'];\n    \n    let imageBase64 = null;\n    let finalPath = null;\n    \n    for (const ext of extensions) {\n        if (fs.existsSync(basePath + ext)) {\n            finalPath = basePath + ext;\n            break;\n        }\n    }\n    \n    try {\n        if (finalPath) {\n            const ext = finalPath.split('.').pop().toLowerCase();\n            const mime = (ext === 'png') ? 'image/png' : 'image/jpeg';\n            const buffer = fs.readFileSync(finalPath);\n            imageBase64 = `data:${mime};base64,${buffer.toString('base64')}`;\n        }\n    } catch (err) {\n        console.error('Error leyendo imagen:', err.message);\n    }\n\n    const usd = data['PRECIO USD NUEVO'] ? `$${data['PRECIO USD NUEVO']} USD` : '';\n    const cup = data['PRECIO CUP NUEVO'] ? `${data['PRECIO CUP NUEVO']} CUP` : '';\n    const precioFinal = [cup, usd].filter(Boolean).join(' | ');\n\n    productos.push({\n        id_unico: data['CÓDIGO'],\n        nombre: name,\n        precio: precioFinal,\n        estado: data['ESTADO PUBLICACIÓN'] || 'NO PUBLICADO',\n        imagen: imageBase64\n    });\n}\n\nfs.writeFileSync(cachePath, JSON.stringify(productos));\n\nreturn [{ json: { status: 'success', total_cacheados: productos.length } }];"
+      },
+      "id": "0ab6f181-156e-457a-bf72-7f729d765f4b",
+      "name": "Procesar Imágenes y Crear Caché",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "path": "panel-yourbrand",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8853d384-519a-4d70-9672-c7978358d0ac",
+      "name": "2. Servidor UI (Vendedores)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        800,
+        288
+      ],
+      "webhookId": "c5977e3b-7ac1-4562-85bb-c383e2fb89b3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nlet productos = [];\n\ntry {\n    const rawData = fs.readFileSync('/data/cache_pendientes.json', 'utf8');\n    productos = JSON.parse(rawData);\n} catch (e) {\n    productos = [];\n}\n\n// Escapamos los datos para inyectarlos de forma 100% segura en JS\nconst safeProductosJson = JSON.stringify(productos).replace(/</g, '\\\\u003c');\n\nlet cardsHtml = '';\nfor (const prod of productos) {\n    const imgSrc = prod.imagen ? prod.imagen : 'https://via.placeholder.com/400x400?text=Sin+Imagen';\n    const colorBorde = prod.estado === 'PENDIENTE ACTUALIZAR' ? '#e74c3c' : '#6d1e68';\n    \n    // El botón AHORA SOLO RECIBE EL ID. Cero errores de sintaxis.\n    cardsHtml += `\n    <div class=\"card\" id=\"card-${prod.id_unico}\" style=\"border-left: 6px solid ${colorBorde};\">\n        <img src=\"${imgSrc}\" loading=\"lazy\" alt=\"Producto\" />\n        <div class=\"card-content\">\n            <h3>${prod.nombre}</h3>\n            <p class=\"price\">${prod.precio}</p>\n            <p class=\"badge\">${prod.estado}</p>\n            <button onclick=\"prepararPublicacion('${prod.id_unico}')\">\n                Preparar y Publicar\n            </button>\n        </div>\n    </div>`;\n}\n\nconst html = `\n<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Panel YourBrand</title>\n    <style>\n        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f4f9; padding: 20px; }\n        .header { text-align: center; color: #6d1e68; margin-bottom: 30px; }\n        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }\n        .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }\n        .card img { width: 100%; height: 250px; object-fit: cover; background: #eee; }\n        .card-content { padding: 20px; }\n        .card h3 { margin: 0 0 10px; font-size: 18px; color: #333; }\n        .price { font-size: 22px; font-weight: bold; color: #ffb703; margin: 0 0 10px; }\n        .badge { display: inline-block; padding: 4px 8px; background: #eee; border-radius: 4px; font-size: 12px; margin-bottom: 15px; font-weight: bold; }\n        button { width: 100%; padding: 12px; background: #25D366; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }\n    </style>\n</head>\n<body>\n    <div class=\"header\">\n        <h1>Your Brand - Panel de Publicación</h1>\n    </div>\n    <div class=\"grid\">\n        ${cardsHtml || '<p style=\"text-align: center; grid-column: 1/-1; font-size: 18px;\">Todo el inventario está publicado. ¡Excelente trabajo!</p>'}\n    </div>\n\n    <script>\n    // La Base de Datos vive ahora en la memoria del navegador\n    const DB_PRODUCTOS = ${safeProductosJson};\n\n    async function marcarPublicado(id_unico) {\n        document.getElementById('card-' + id_unico).style.display = 'none';\n        try {\n            await fetch('/webhook/api-publicar', {\n                method: 'POST',\n                headers: {'Content-Type': 'application/json'},\n                body: JSON.stringify({ id_unico: id_unico })\n            });\n        } catch(e) { console.error('Error sincronizando estado'); }\n    }\n\n    function prepararPublicacion(id_unico) {\n        try {\n            // Buscamos los datos limpios en la memoria\n            const producto = DB_PRODUCTOS.find(p => String(p.id_unico) === String(id_unico));\n            if (!producto) return alert('Error: Producto no encontrado en la base de datos local.');\n\n            if (producto.imagen && producto.imagen.startsWith('data:image')) {\n                const link = document.createElement('a');\n                link.href = producto.imagen;\n                // Limpiamos el nombre para evitar errores al guardar el archivo en el móvil\n                const safeName = producto.nombre.replace(/[^a-z0-9]/gi, '_').toLowerCase();\n                link.download = 'YourBrand_' + safeName + '.jpg';\n                document.body.appendChild(link);\n                link.click();\n                document.body.removeChild(link);\n            }\n\n            const texto = '🔥 *NUEVO INGRESO EN YOURBRAND OUTFIT* 🔥\\\\n\\\\n📦 Producto: ' + producto.nombre + '\\\\n💰 Precio: ' + producto.precio + '\\\\n\\\\n📍 ¡Visítanos o pide tu domicilio ahora!';\n            \n            marcarPublicado(id_unico);\n\n            setTimeout(() => {\n                window.location.href = 'whatsapp://send?text=' + encodeURIComponent(texto);\n            }, 600);\n        } catch(e) { \n            console.error(e);\n            alert('Error preparando publicación.'); \n        }\n    }\n    </script>\n</body>\n</html>`;\n\nreturn [{ json: { html: html } }];"
+      },
+      "id": "b866d589-4dd4-40f6-8f76-62302514e343",
+      "name": "Renderizar SSR HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "44a56d65-84fb-4426-8e4d-51403157121b",
+      "name": "Devolver Web",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api-publicar",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1ff41d01-4871-4d99-bc1a-4ee5ec9326bf",
+      "name": "3. Mutador (Marcar Publicado)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        800,
+        480
+      ],
+      "webhookId": "55974b00-9ff8-46ed-90e1-76973789c659"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.id_unico }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "2afa05a3-ec0d-434e-8ccb-8bb5d4439385",
+      "name": "Validar Payload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1o2JNhZbJtPXcg41YcG5_BKkhEB0nfse5JVZ62k_5Y6Q",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Inventario",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ESTADO PUBLICACIÓN": "PUBLICADO",
+            "FECHA ÚLTIMA EDICIÓN": "={{ $now }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "70ab00ba-772a-448d-af82-56a8e1c658ae",
+      "name": "Actualizar a PUBLICADO",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1200,
+        464
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wdFEKETdaDV8ZhiB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"success\"\n}",
+        "options": {}
+      },
+      "id": "416b85f5-77cb-40e8-b56c-04cca6a86f45",
+      "name": "Confirmar a UI",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        464
+      ]
+    }
+  ],
+  "connections": {
+    "1. Sincronizar (Cada Hora)": {
+      "main": [
+        [
+          {
+            "node": "Leer Google Sheets (Pendientes)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Google Sheets (Pendientes)": {
+      "main": [
+        [
+          {
+            "node": "Procesar Imágenes y Crear Caché",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Servidor UI (Vendedores)": {
+      "main": [
+        [
+          {
+            "node": "Renderizar SSR HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Renderizar SSR HTML": {
+      "main": [
+        [
+          {
+            "node": "Devolver Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Mutador (Marcar Publicado)": {
+      "main": [
+        [
+          {
+            "node": "Validar Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Payload": {
+      "main": [
+        [
+          {
+            "node": "Actualizar a PUBLICADO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar a PUBLICADO": {
+      "main": [
+        [
+          {
+            "node": "Confirmar a UI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:1. Sincronizar (Cada Hora)": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "0dabb3a2-2569-4820-8aa4-22260855f1e5",
+  "activeVersionId": "90ee0c5d-7a9e-4ae2-b2ca-1fcfbf72c17a",
+  "triggerCount": 3,
+  "shared": [
+    {
+      "updatedAt": "2026-02-25T19:57:54.936Z",
+      "createdAt": "2026-02-25T19:57:54.936Z",
+      "role": "workflow:owner",
+      "workflowId": "mNrplRMpwkiL3S4G",
+      "projectId": "wrAcVFBjHe5KMnRw"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-02-25T20:58:11.710Z",
+    "createdAt": "2026-02-25T20:58:01.644Z",
+    "versionId": "90ee0c5d-7a9e-4ae2-b2ca-1fcfbf72c17a",
+    "workflowId": "mNrplRMpwkiL3S4G",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours"
+              }
+            ]
+          }
+        },
+        "id": "3adcae40-0f0a-49e2-8adc-cb011afea6f5",
+        "name": "1. Sincronizar (Cada Hora)",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1,
+        "position": [
+          800,
+          80
+        ]
+      },
+      {
+        "parameters": {
+          "documentId": {
+            "__rl": true,
+            "value": "1o2JNhZbJtPXcg41YcG5_BKkhEB0nfse5JVZ62k_5Y6Q",
+            "mode": "id"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "Inventario",
+            "mode": "list"
+          },
+          "filtersUI": {
+            "values": [
+              {
+                "lookupColumn": "ESTADO PUBLICACIÓN",
+                "lookupValue": "PUBLICADO"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "0942d3a5-caaa-4bd9-8873-f2e58b0a4327",
+        "name": "Leer Google Sheets (Pendientes)",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4,
+        "position": [
+          1008,
+          80
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "wdFEKETdaDV8ZhiB",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const fs = require('fs');\nconst cachePath = '/data/cache_pendientes.json';\nconst productos = [];\n\nfor (const item of $input.all()) {\n    const data = item.json;\n    \n    const rawCat = data['CATEGORÍA'] || '';\n    const cat = rawCat ? rawCat.charAt(0).toUpperCase() + rawCat.slice(1).toLowerCase() : 'SinCategoria';\n    const name = data['NOMBRE'] || '';\n    \n    const basePath = `/data/your-photos-folder/${cat}/${name}`;\n    const extensions = ['.jpg', '.png', '.jpeg', '.JPG', '.PNG'];\n    \n    let imageBase64 = null;\n    let finalPath = null;\n    \n    for (const ext of extensions) {\n        if (fs.existsSync(basePath + ext)) {\n            finalPath = basePath + ext;\n            break;\n        }\n    }\n    \n    try {\n        if (finalPath) {\n            const ext = finalPath.split('.').pop().toLowerCase();\n            const mime = (ext === 'png') ? 'image/png' : 'image/jpeg';\n            const buffer = fs.readFileSync(finalPath);\n            imageBase64 = `data:${mime};base64,${buffer.toString('base64')}`;\n        }\n    } catch (err) {\n        console.error('Error leyendo imagen:', err.message);\n    }\n\n    const usd = data['PRECIO USD NUEVO'] ? `$${data['PRECIO USD NUEVO']} USD` : '';\n    const cup = data['PRECIO CUP NUEVO'] ? `${data['PRECIO CUP NUEVO']} CUP` : '';\n    const precioFinal = [cup, usd].filter(Boolean).join(' | ');\n\n    productos.push({\n        id_unico: data['CÓDIGO'],\n        nombre: name,\n        precio: precioFinal,\n        estado: data['ESTADO PUBLICACIÓN'] || 'NO PUBLICADO',\n        imagen: imageBase64\n    });\n}\n\nfs.writeFileSync(cachePath, JSON.stringify(productos));\n\nreturn [{ json: { status: 'success', total_cacheados: productos.length } }];"
+        },
+        "id": "0ab6f181-156e-457a-bf72-7f729d765f4b",
+        "name": "Procesar Imágenes y Crear Caché",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1200,
+          80
+        ]
+      },
+      {
+        "parameters": {
+          "path": "panel-yourbrand",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "8853d384-519a-4d70-9672-c7978358d0ac",
+        "name": "2. Servidor UI (Vendedores)",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          800,
+          288
+        ],
+        "webhookId": "c5977e3b-7ac1-4562-85bb-c383e2fb89b3"
+      },
+      {
+        "parameters": {
+          "jsCode": "const fs = require('fs');\nlet productos = [];\n\ntry {\n    const rawData = fs.readFileSync('/data/cache_pendientes.json', 'utf8');\n    productos = JSON.parse(rawData);\n} catch (e) {\n    productos = [];\n}\n\nlet cardsHtml = '';\nfor (const prod of productos) {\n    const imgSrc = prod.imagen ? prod.imagen : 'https://via.placeholder.com/400x400?text=Sin+Imagen';\n    const colorBorde = prod.estado === 'PENDIENTE ACTUALIZAR' ? '#e74c3c' : '#6d1e68';\n    \n    cardsHtml += `\n    <div class=\"card\" id=\"card-${prod.id_unico}\" style=\"border-left: 6px solid ${colorBorde};\">\n        <img src=\"${imgSrc}\" loading=\"lazy\" alt=\"Producto\" />\n        <div class=\"card-content\">\n            <h3>${prod.nombre}</h3>\n            <p class=\"price\">${prod.precio}</p>\n            <p class=\"badge\">${prod.estado}</p>\n            <button onclick=\"prepararPublicacion('${prod.id_unico}', '${imgSrc}', '${prod.nombre}', '${prod.precio}')\">\n                Preparar y Publicar\n            </button>\n        </div>\n    </div>`;\n}\n\nconst html = `\n<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Panel YourBrand</title>\n    <style>\n        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f4f9; padding: 20px; }\n        .header { text-align: center; color: #6d1e68; margin-bottom: 30px; }\n        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }\n        .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }\n        .card img { width: 100%; height: 250px; object-fit: cover; background: #eee; }\n        .card-content { padding: 20px; }\n        .card h3 { margin: 0 0 10px; font-size: 18px; color: #333; }\n        .price { font-size: 22px; font-weight: bold; color: #ffb703; margin: 0 0 10px; }\n        .badge { display: inline-block; padding: 4px 8px; background: #eee; border-radius: 4px; font-size: 12px; margin-bottom: 15px; font-weight: bold; }\n        button { width: 100%; padding: 12px; background: #25D366; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }\n    </style>\n</head>\n<body>\n    <div class=\"header\">\n        <h1>Your Brand - Panel de Publicación</h1>\n    </div>\n    <div class=\"grid\">\n        ${cardsHtml || '<p style=\"text-align: center; grid-column: 1/-1; font-size: 18px;\">Todo el inventario está publicado. ¡Excelente trabajo!</p>'}\n    </div>\n\n    <script>\n    async function marcarPublicado(id_unico) {\n        document.getElementById('card-' + id_unico).style.display = 'none';\n        try {\n            await fetch('/webhook/api-publicar', {\n                method: 'POST',\n                headers: {'Content-Type': 'application/json'},\n                body: JSON.stringify({ id_unico: id_unico })\n            });\n        } catch(e) { console.error('Error sincronizando estado'); }\n    }\n\n    function prepararPublicacion(id_unico, base64Image, nombreProducto, precio) {\n        try {\n            if(base64Image.startsWith('data:image')) {\n                const link = document.createElement('a');\n                link.href = base64Image;\n                link.download = 'YourBrand_' + nombreProducto.replace(/\\\\s+/g, '_') + '.jpg';\n                document.body.appendChild(link);\n                link.click();\n                document.body.removeChild(link);\n            }\n\n            const texto = '🔥 *NUEVO INGRESO EN YOURBRAND OUTFIT* 🔥\\n\\n📦 Producto: ' + nombreProducto + '\\n💰 Precio: ' + precio + '\\n\\n📍 ¡Visítanos o pide tu domicilio ahora!';\n            \n            marcarPublicado(id_unico);\n\n            setTimeout(() => {\n                window.location.href = 'whatsapp://send?text=' + encodeURIComponent(texto);\n            }, 600);\n        } catch(e) { alert('Error preparando publicación.'); }\n    }\n    </script>\n</body>\n</html>`;\n\nreturn [{ json: { html: html } }];"
+        },
+        "id": "b866d589-4dd4-40f6-8f76-62302514e343",
+        "name": "Renderizar SSR HTML",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1008,
+          288
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ $json.html }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/html; charset=utf-8"
+                }
+              ]
+            }
+          }
+        },
+        "id": "44a56d65-84fb-4426-8e4d-51403157121b",
+        "name": "Devolver Web",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          1200,
+          288
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "api-publicar",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "1ff41d01-4871-4d99-bc1a-4ee5ec9326bf",
+        "name": "3. Mutador (Marcar Publicado)",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          800,
+          480
+        ],
+        "webhookId": "55974b00-9ff8-46ed-90e1-76973789c659"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.body.id_unico }}",
+                "operation": "isNotEmpty"
+              }
+            ]
+          }
+        },
+        "id": "2afa05a3-ec0d-434e-8ccb-8bb5d4439385",
+        "name": "Validar Payload",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          1008,
+          480
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "update",
+          "documentId": {
+            "__rl": true,
+            "value": "1o2JNhZbJtPXcg41YcG5_BKkhEB0nfse5JVZ62k_5Y6Q",
+            "mode": "id"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "Inventario",
+            "mode": "list"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "ESTADO PUBLICACIÓN": "PUBLICADO",
+              "FECHA ÚLTIMA EDICIÓN": "={{ $now }}"
+            }
+          },
+          "options": {}
+        },
+        "id": "70ab00ba-772a-448d-af82-56a8e1c658ae",
+        "name": "Actualizar a PUBLICADO",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4,
+        "position": [
+          1200,
+          464
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "wdFEKETdaDV8ZhiB",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "{\n  \"status\": \"success\"\n}",
+          "options": {}
+        },
+        "id": "416b85f5-77cb-40e8-b56c-04cca6a86f45",
+        "name": "Confirmar a UI",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          1408,
+          464
+        ]
+      }
+    ],
+    "connections": {
+      "1. Sincronizar (Cada Hora)": {
+        "main": [
+          [
+            {
+              "node": "Leer Google Sheets (Pendientes)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Leer Google Sheets (Pendientes)": {
+        "main": [
+          [
+            {
+              "node": "Procesar Imágenes y Crear Caché",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "2. Servidor UI (Vendedores)": {
+        "main": [
+          [
+            {
+              "node": "Renderizar SSR HTML",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Renderizar SSR HTML": {
+        "main": [
+          [
+            {
+              "node": "Devolver Web",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "3. Mutador (Marcar Publicado)": {
+        "main": [
+          [
+            {
+              "node": "Validar Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validar Payload": {
+        "main": [
+          [
+            {
+              "node": "Actualizar a PUBLICADO",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Actualizar a PUBLICADO": {
+        "main": [
+          [
+            {
+              "node": "Confirmar a UI",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "alvaro aruizriveron@gmail.com",
+    "name": "Version 90ee0c5d",
+    "description": "",
+    "autosaved": true
+  },
+  "tags": []
+}

@@ -1,0 +1,269 @@
+{
+  "updatedAt": "2026-03-11T17:10:12.408Z",
+  "createdAt": "2026-03-07T14:17:49.965Z",
+  "id": "OVcWRaCGB0aGve9L",
+  "name": "Motor Render Universal (Sub-Workflow)",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nlet item;\ntry { \n  item = $input.first().json; \n} catch(e) { \n  throw new Error('No se pudo acceder a datos de entrada.'); \n}\n\nif (!item) {\n  throw new Error('El objeto json recibido está vacío.');\n}\n\nlet rawItem = Array.isArray(item) ? item[0] : item;\nif (typeof rawItem === 'string') rawItem = JSON.parse(rawItem);\n\nif (rawItem.parameter && Array.isArray(rawItem.parameter)) {\n    rawItem.parameter.forEach(p => {\n        if (p.name && p.value !== undefined) {\n            rawItem[p.name] = p.value;\n        }\n    });\n}\n\nif (rawItem.json && typeof rawItem.json === 'object') {\n    Object.assign(rawItem, rawItem.json);\n}\n\nconst productId = rawItem.productId || rawItem.NOMBRE || 'PRODUCTO_DESCONOCIDO';\nconst categoryRaw = rawItem.categoryRaw || rawItem.CATEGORIA || 'General';\nconst marca = rawItem.marca || 'yourbrand';\nconst fileName = rawItem.fileName || (rawItem.path ? path.basename(rawItem.path) : 'imagen.jpg');\n\n// CAMBIO CRÍTICO: RUTA A LOGO.PNG\nconst logoPath = rawItem.logoPath || '/data/logo.png';\nconst productoPath = rawItem.productoPath || rawItem.path;\n\nif (!productoPath) {\n    throw new Error('ERROR: No se recibió la ruta del producto.');\n}\n\ntry {\n  const logoBuffer = fs.readFileSync(logoPath);\n  const productoBuffer = fs.readFileSync(productoPath);\n  \n  const getMime = (p) => {\n    const ext = path.extname(p).toLowerCase();\n    if (ext === '.png') return 'image/png';\n    if (ext === '.webp') return 'image/webp';\n    return 'image/jpeg';\n  };\n\n  return [{\n    json: {\n      ...rawItem,\n      productId,\n      categoryRaw,\n      marca,\n      fileName,\n      logoPath,\n      productoPath,\n      logoMime: getMime(logoPath),\n      productoMime: getMime(productoPath),\n      logoBase64: logoBuffer.toString('base64'),\n      productoBase64: productoBuffer.toString('base64')\n    },\n    binary: {\n      \"dataProducto\": {\n        data: productoBuffer.toString('base64'),\n        mimeType: getMime(productoPath),\n        fileName: fileName\n      }\n    }\n  }];\n} catch (e) {\n  throw new Error('Fallo al leer archivos físicos: ' + e.message);\n}"
+      },
+      "id": "read_files",
+      "name": "Read Files & Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.marca }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "yourbrand"
+            },
+            {
+              "value2": "yourdulceria"
+            }
+          ]
+        }
+      },
+      "id": "switch_marca",
+      "name": "Switch Marca",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        384,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst logoMime = item.logoMime || 'image/jpeg';\nconst logoBase64 = item.logoBase64 || '';\nconst productoMime = item.productoMime || 'image/jpeg';\nconst productoBase64 = item.productoBase64 || '';\nconst productId = item.productId || 'PRODUCTO';\nconst cupPrice = item.cupFormatted || (item.cupPrice ? item.cupPrice + ' CUP' : '0 CUP');\nconst usdPrice = item.usdFormatted || (item.usdPrice ? item.usdPrice + ' USD' : '0 USD');\nconst copyText = item.copyText || '🛍️ CALIDAD Y ESTILO AL MEJOR PRECIO ✨';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n    <meta charset=\"UTF-8\">\n    <style>\n        * { margin: 0; padding: 0; box-sizing: border-box; }\n        \n        body, html {\n            width: 1080px;\n            height: 1440px;\n            overflow: hidden;\n            background-color: #6d1e68;\n            font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif;\n        }\n\n        .main-canvas {\n            width: 1080px;\n            height: 1440px;\n            display: flex;\n            flex-direction: column;\n            position: relative;\n        }\n\n        /* ESTRATEGIA LIENZO LIMPIO: Solo posición y tamaño */\n        .logo-raw {\n            position: absolute;\n            top: 50px;\n            left: 50px;\n            width: 180px;\n            z-index: 100;\n        }\n\n        .product-area {\n            position: absolute;\n            top: 0;\n            left: 0;\n            width: 1080px;\n            height: 1100px;\n            display: flex;\n            justify-content: center;\n            align-items: center;\n            padding: 20px;\n        }\n\n        .product-img {\n            max-width: 1040px;\n            max-height: 1000px;\n            object-fit: contain;\n            filter: drop-shadow(0px 35px 65px rgba(0,0,0,0.55));\n        }\n\n        /* FOOTER BLANCO - DISTRIBUCIÓN MEJORADA */\n        .info-footer {\n            position: absolute;\n            bottom: 0;\n            left: 0;\n            width: 1080px;\n            height: 340px;\n            background-color: #ffffff;\n            display: flex;\n            flex-direction: column;\n            justify-content: space-between; /* TOP, CENTER, BOTTOM */\n            align-items: center;\n            text-align: center;\n            padding: 40px 50px; /* Margen superior e inferior */\n            box-shadow: 0px -15px 40px rgba(0,0,0,0.2);\n            z-index: 10;\n        }\n\n        .name-tag {\n            font-size: 36px;\n            font-weight: 700;\n            color: #000000;\n            text-transform: uppercase;\n            text-decoration: underline;\n            width: 100%;\n            white-space: nowrap;\n            overflow: hidden;\n            text-overflow: ellipsis;\n        }\n\n        .price-row {\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            gap: 12px;\n        }\n\n        .price-val {\n            font-size: 68px;\n            font-weight: 800;\n            color: #fb7701;\n            letter-spacing: -1.5px;\n        }\n\n        .price-sep {\n            font-size: 50px;\n            font-weight: 300;\n            color: #fb7701;\n        }\n\n        .slogan-tag {\n            font-size: 32px; /* Aumentado de 26px a 32px */\n            font-weight: 800;\n            color: #000000;\n            text-transform: uppercase;\n            line-height: 1.2;\n            max-width: 900px;\n        }\n    </style>\n</head>\n<body>\n    <div class=\"main-canvas\">\n        <!-- Logo sin estilos extra -->\n        <img src=\"data:${logoMime};base64,${logoBase64}\" class=\"logo-raw\" />\n        \n        <div class=\"product-area\">\n            <img src=\"data:${productoMime};base64,${productoBase64}\" class=\"product-img\" />\n        </div>\n\n        <div class=\"info-footer\">\n            <div class=\"name-tag\">${productId}</div>\n            <div class=\"price-row\">\n                <span class=\"price-val\">${cupPrice}</span>\n                <span class=\"price-sep\">/</span>\n                <span class=\"price-val\">${usdPrice}</span>\n            </div>\n            <div class=\"slogan-tag\">\n                ${copyText}\n            </div>\n        </div>\n    </div>\n</body>\n</html>`;\n\nreturn [{ json: { ...item, html } }];\n"
+      },
+      "id": "set_html_yourbrand",
+      "name": "Set HTML YourBrand",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst logoMime = item.logoMime || 'image/jpeg';\nconst logoBase64 = item.logoBase64 || '';\nconst productoMime = item.productoMime || 'image/jpeg';\nconst productoBase64 = item.productoBase64 || '';\nconst productId = item.productId || item.displayName || 'PRODUCTO';\nconst cupPrice = item.cupFormatted || (item.cupPrice ? item.cupPrice + ' CUP' : '0 CUP');\n\nconst html = `<style>\n  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Open+Sans:wght@700;800&display=swap');\n  \n  body, html { margin: 0; padding: 0; width: 1200px; height: 1200px; overflow: hidden; }\n  \n  .main { \n    background-color: #600000; \n    width: 1200px; \n    height: 1200px; \n    position: relative; \n    font-family: 'Open Sans', sans-serif; \n    display: flex; \n    flex-direction: column; \n  }\n\n  .logo { \n    position: absolute; \n    top: 40px; \n    left: 40px; \n    width: 180px; \n    height: 180px; \n    border-radius: 50%; \n    border: 6px solid #C5A059; \n    background-color: #600000; \n    background-size: auto 165%; \n    background-position: center center; \n    background-repeat: no-repeat; \n    z-index: 10; \n    box-shadow: 0 10px 20px rgba(0,0,0,0.4);\n  }\n\n  .product-box { \n    flex: 1; \n    display: flex; \n    justify-content: center; \n    align-items: center; \n    padding-bottom: 250px;\n    padding-top: 30px; \n  }\n\n  .product-img { \n    max-width: 1000px; \n    max-height: 950px;\n    object-fit: contain; \n    filter: drop-shadow(0 25px 50px rgba(0,0,0,0.8)); \n  }\n\n  .footer { \n    position: absolute; \n    bottom: 0; \n    width: 100%; \n    height: 280px; \n    background: linear-gradient(180deg, #C5A059 0%, #A68648 100%); \n    display: flex; \n    flex-direction: column; \n    justify-content: center; \n    align-items: center; \n    text-align: center;\n    box-sizing: border-box; \n    border-top: 10px solid #3d0000; \n    padding: 0 40px;\n  }\n\n  .product-name { \n    color: #600000; \n    font-size: 54px; \n    font-weight: 800; \n    margin: 0 0 5px 0; \n    text-transform: uppercase; \n    font-family: 'Montserrat', sans-serif; \n  }\n\n  .product-price { \n    color: #000000; \n    font-size: 90px; \n    font-weight: 900; \n    margin: 0; \n    font-family: 'Montserrat', sans-serif; \n  }\n</style>\n\n<div class=\"main\">\n  <div class=\"logo\" style=\"background-image: url('data:${logoMime};base64,${logoBase64}');\"></div>\n  <div class=\"product-box\">\n    <img src=\"data:${productoMime};base64,${productoBase64}\" class=\"product-img\">\n  </div>\n  <div class=\"footer\">\n    <p class=\"product-name\">${productId}</p>\n    <p class=\"product-price\">${cupPrice}</p>\n  </div>\n</div>`;\n\nreturn [{ json: { ...item, html } }];"
+      },
+      "id": "set_html_yourdulceria",
+      "name": "Set HTML YourDulceria",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "html": "={{ $json.html }}"
+      },
+      "id": "render_html",
+      "name": "Render HTML to Image",
+      "type": "n8n-nodes-html2image.html2image",
+      "typeVersion": 1,
+      "position": [
+        960,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.destinoPath }}",
+        "options": {}
+      },
+      "id": "save_file",
+      "name": "Save Result",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const path = require('path');\nconst fs = require('fs');\n\nconst binaryData = $input.first().binary;\nconst currentItem = $('Read Files & Base64').item.json;\n\n// IMPORTANTE: productId viene limpio desde el origen\nconst marca = currentItem.marca || 'yourbrand';\nconst categoria = currentItem.categoryRaw || 'General';\nconst nombreProducto = currentItem.productId || 'producto';\n\n// El flag de IA se usa SOLO para el nombre del archivo\n// En esta versión simplificada iaUsed es false por defecto, \n// pero mantenemos la lógica por si quieres reactivarla.\nconst iaUsed = currentItem.iaUsed || false;\nconst sufijoIA = iaUsed ? ' IA' : '';\n\n// Estandarización de la ruta final con sufijo IA SOLO en el archivo\nconst extension = '.jpg';\nconst destinoPath = `/data/fotosProcesadas/${marca}/${categoria}/${nombreProducto}${sufijoIA}${extension}`;\n\ntry {\n  const targetDir = path.dirname(destinoPath);\n  if (!fs.existsSync(targetDir)) {\n    fs.mkdirSync(targetDir, { recursive: true });\n  }\n} catch (e) {\n  console.error('Error creando directorio:', e.message);\n}\n\nreturn [{\n  json: {\n    ...currentItem,\n    destinoPath\n  },\n  binary: binaryData\n}];"
+      },
+      "id": "definir_ruta_final",
+      "name": "Definir Ruta Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        0
+      ]
+    },
+    {
+      "id": "generar_slogan_aleatorio",
+      "name": "Generar Slogan Aleatorio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        150,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const slogans = [\n  \"🛍️ ¡Calidad premium al precio que buscas! ✨\",\n  \"💸 ¡Ahorra más con la mejor calidad! 🌟\",\n  \"💎 Lo mejor para ti, sin gastar de más 🤑\",\n  \"🏷️ Precios bajos, estilo insuperable 👗\",\n  \"🚀 ¡Ofertas increíbles en productos top! 🔥\",\n  \"✨ La calidad que mereces al precio ideal 💰\",\n  \"🎒 ¡Renueva tu estilo sin pagar de más! 🛒\",\n  \"🏆 Calidad garantizada a precios de locura 🎈\",\n  \"🌈 ¡Variedad, calidad y el mejor ahorro! 🎊\",\n  \"⚡ ¡Corre por lo mejor al mejor precio! 🎁\"\n];\n\nconst item = $input.first().json;\nconst randomIndex = Math.floor(Math.random() * slogans.length);\n\nreturn {\n  ...item,\n  copyText: slogans[randomIndex],\n  iaUsed: false // Ya no usamos IA\n};"
+      }
+    }
+  ],
+  "connections": {
+    "Switch Marca": {
+      "main": [
+        [
+          {
+            "node": "Set HTML YourBrand",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set HTML YourDulceria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set HTML YourBrand": {
+      "main": [
+        [
+          {
+            "node": "Render HTML to Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set HTML YourDulceria": {
+      "main": [
+        [
+          {
+            "node": "Render HTML to Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render HTML to Image": {
+      "main": [
+        [
+          {
+            "node": "Definir Ruta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir Ruta Final": {
+      "main": [
+        [
+          {
+            "node": "Save Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Files & Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Files & Base64": {
+      "main": [
+        [
+          {
+            "node": "Generar Slogan Aleatorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Slogan Aleatorio": {
+      "main": [
+        [
+          {
+            "node": "Switch Marca",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "fdde5fad-b39a-4736-b550-56e81b918c07",
+  "activeVersionId": null,
+  "versionCounter": 62,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-03-07T14:17:49.965Z",
+      "createdAt": "2026-03-07T14:17:49.965Z",
+      "role": "workflow:owner",
+      "workflowId": "OVcWRaCGB0aGve9L",
+      "projectId": "wrAcVFBjHe5KMnRw",
+      "project": {
+        "updatedAt": "2026-03-04T17:24:07.141Z",
+        "createdAt": "2026-02-23T16:16:47.824Z",
+        "id": "wrAcVFBjHe5KMnRw",
+        "name": "alvaro ruiz <aruizriveron@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "8b0abd32-af58-45bf-ad8b-27cfa3f0ce32"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

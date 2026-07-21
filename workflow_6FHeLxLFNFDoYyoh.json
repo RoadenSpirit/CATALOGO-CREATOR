@@ -1,0 +1,1806 @@
+{
+  "updatedAt": "2026-06-24T20:04:05.531Z",
+  "createdAt": "2026-04-10T10:50:31.761Z",
+  "id": "6FHeLxLFNFDoYyoh",
+  "name": "YourBrand Batch: Producción Real (V3 - RESTAURADO) (Optimizado con Filtro Nativo)",
+  "description": "",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "▶️ Inicio Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [
+        -1232,
+        160
+      ],
+      "typeVersion": 1,
+      "notesInFlow": true,
+      "id": "cf4e9742-ae24-412f-937a-96d867337609",
+      "notes": "Punto de entrada para ejecutar el procesamiento por lotes de forma manual."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "value": 700,
+              "name": "TASA_CAMBIO_CUP",
+              "type": "number",
+              "id": "a9c6f0bb-a007-46fe-ba15-3014fe4548ec"
+            },
+            {
+              "type": "boolean",
+              "value": true,
+              "name": "APLICAR_TASA",
+              "id": "d1c93b5f-9acf-4826-8c42-a20700d029de"
+            },
+            {
+              "value": "7105458251",
+              "type": "string",
+              "name": "GREEN_API_INSTANCE_ID",
+              "id": "fd3525fe-c151-4e44-b574-93215174756a"
+            },
+            {
+              "value": "2319082d7f2841d5a7503750cb1fd8b8d3afd345457e4e1e80",
+              "type": "string",
+              "name": "GREEN_API_TOKEN",
+              "id": "2517faeb-7ea5-4ae6-bf2f-2faf8009d96d"
+            },
+            {
+              "value": "120363425558134480@g.us",
+              "name": "GREEN_API_CHAT_ID",
+              "type": "string",
+              "id": "bf29d453-e661-451d-ba58-35078dd1f3ae"
+            },
+            {
+              "value": 30,
+              "name": "INTERVALO_MINUTOS",
+              "type": "number",
+              "id": "ce973413-8469-48c3-8b59-7e1195583c75"
+            },
+            {
+              "value": 30,
+              "name": "BATCH_LIMIT",
+              "type": "number",
+              "id": "522b614f-09c0-4737-a34e-aeebb26382de"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notesInFlow": true,
+      "position": [
+        -1008,
+        160
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "name": "⚙️ Variables Globales",
+      "id": "3a05ee99-eeda-482b-8979-66c0dbb5108b",
+      "notes": "Define la tasa de cambio CUP actual y si se debe aplicar o no la conversión de monedas."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=969974582#gid=969974582",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=969974582#gid=969974582",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "retryOnFail": true,
+      "position": [
+        -160,
+        224
+      ],
+      "typeVersion": 4.7,
+      "type": "n8n-nodes-base.googleSheets",
+      "maxTries": 5,
+      "notesInFlow": true,
+      "name": "📊 Leer Inventario Sheets",
+      "id": "18f5aac3-bcf5-4484-a6d8-6a8648a86454",
+      "credentials": {
+        "googleApi": {
+          "id": "b8wghPeWNy41uIJM",
+          "name": "Google Drive account 6"
+        }
+      },
+      "notes": "Descarga la lista maestra de productos y precios desde Google Sheets."
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all(); \nconst out = []; \nconst normalizeName = (str) => str ? String(str).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '') : ''; \nconst formatUsd = (val) => '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD'; \nconst formatCup = (val) => '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' CUP'; \n\n// Función estricta para sanear nombres prohibidos en Windows y evitar inyecciones\nconst sanitizeFileName = (str) => str ? String(str).replace(/[\"<>:/\\\\|?*]/g, '').replace(/\\s+/g, ' ').trim() : '';\n\nfor (const item of items) { \n  const row = item.json; \n  let nombreOriginal = row['PRODUCTO'] ? String(row['PRODUCTO']).trim() : ''; \n  if (!nombreOriginal) continue; \n  \n  // Saneamiento para el identificador de archivos\n  const nombreSaneado = sanitizeFileName(nombreOriginal);\n  // NO sobreescribimos row['PRODUCTO'] para no romper el Update de Google Sheets\n  row['PRODUCTO'] = nombreOriginal;\n  \n  const actualUsd = parseFloat(row['ACTUAL USD']) || 0; \n  const actualCup = parseFloat(row['ACTUAL CUP']) || 0; \n  const maxUsd = parseFloat(row['MAX HIST USD']) || 0; \n  const maxCup = parseFloat(row['MAX HIST CUP']) || 0; \n  const hasDiscount = (maxUsd > actualUsd) && (maxCup > actualCup); \n  \n  const tallas = []; \n  for(let i=1; i<=9; i++){ \n    const t = row['T'+i]; \n    if(t && String(t).trim() !== '') tallas.push(String(t).trim()); \n  } \n  const tallaStr = tallas.join(', '); \n  \n  // Nos aseguramos de estandarizar la propiedad CATEGORÍA al inicio\n  const categoria = (row['CATEGORÍA'] || row['CATEGORIA'] || 'GENERAL').toUpperCase().trim();\n\n  out.push({ \n    json: { \n      ...row, \n      CATEGORÍA: categoria, \n      matchKey: normalizeName(nombreSaneado), \n      productId: nombreSaneado, \n      usdPrice: actualUsd, \n      cupPrice: actualCup, \n      usdFormatted: formatUsd(actualUsd), \n      cupFormatted: formatCup(actualCup), \n      hasDiscount: hasDiscount, \n      maxUsdFormatted: hasDiscount ? formatUsd(maxUsd) : null, \n      maxCupFormatted: hasDiscount ? formatCup(maxCup) : null, \n      diffUsdFormatted: hasDiscount ? formatUsd(maxUsd - actualUsd) : null, \n      diffCupFormatted: hasDiscount ? formatCup(maxCup - actualCup) : null, \n      talla: tallaStr \n    } \n  }); \n} \nreturn out;"
+      },
+      "position": [
+        48,
+        224
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "name": "💲 Formatear Precios y Tallas",
+      "notesInFlow": true,
+      "id": "835c6734-8d31-4249-be67-19b9cd07d953",
+      "notes": "Limpia los números, calcula si hay descuentos activos y extrae las tallas disponibles (T1-T9)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "rightValue": true,
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "leftValue": "={{ $('⚙️ Variables Globales').first().json.APLICAR_TASA }}"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notesInFlow": true,
+      "type": "n8n-nodes-base.if",
+      "position": [
+        320,
+        208
+      ],
+      "name": "🔀 ¿Aplicar Tasa de Cambio?",
+      "typeVersion": 2.3,
+      "id": "55bc4419-ef85-4cd7-bbe0-c90ebd8f4211",
+      "onError": "continueErrorOutput",
+      "notes": "Decide si el precio en CUP debe ser recalculado basándose en el precio USD y la tasa global."
+    },
+    {
+      "parameters": {
+        "jsCode": "const nodoConfig = $('⚙️ Variables Globales').first(); const tasaCambio = parseFloat(nodoConfig.json.TASA_CAMBIO_CUP); for (const item of $input.all()) { const producto = item.json; const precioUSD = parseFloat(producto['ACTUAL USD']); if (!isNaN(precioUSD) && precioUSD > 0) { const nuevoPrecioCUP = Math.round(precioUSD * tasaCambio); producto['ACTUAL CUP'] = nuevoPrecioCUP; producto['cupPrice'] = nuevoPrecioCUP; producto['cupFormatted'] = '$' + nuevoPrecioCUP.toLocaleString('en-US') + ' CUP'; } } return $input.all();"
+      },
+      "notesInFlow": true,
+      "name": "💱 Recalcular Precio CUP",
+      "typeVersion": 2,
+      "type": "n8n-nodes-base.code",
+      "position": [
+        656,
+        192
+      ],
+      "id": "515927ec-ed64-43fc-9d7b-50b070813d1b",
+      "notes": "Multiplica el valor en USD por la tasa de cambio para obtener el nuevo precio en moneda nacional."
+    },
+    {
+      "parameters": {},
+      "notesInFlow": true,
+      "name": "⏳ Esperar Inventario",
+      "typeVersion": 3.2,
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        1344,
+        -32
+      ],
+      "id": "f885a440-385a-493d-bc02-617b82945ad6",
+      "notes": "Espera que los precios y rutas locales terminen de leerse."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "name": "📋 Leer Estado de Progreso",
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.googleSheets",
+      "maxTries": 5,
+      "notesInFlow": true,
+      "typeVersion": 4.7,
+      "position": [
+        80,
+        704
+      ],
+      "id": "22b21d2b-fb45-4aa9-b216-d4dfe1e6c111",
+      "credentials": {
+        "googleApi": {
+          "id": "b8wghPeWNy41uIJM",
+          "name": "Google Drive account 6"
+        }
+      },
+      "notes": "Lee la hoja de cálculo para saber qué productos ya fueron procesados anteriormente y evitar trabajo doble."
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => { const row = item.json; return { json: { matchKey: (row.PRODUCTO || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''), imgExistente: row.IMG || '', precioUsdExistente: parseFloat(row['P. ACTUAL USD']) || 0, precioCupExistente: parseFloat(row['P. ACTUAL CUP']) || 0, ESTADO: row.ESTADO || '' } }; });"
+      },
+      "typeVersion": 2,
+      "type": "n8n-nodes-base.code",
+      "position": [
+        352,
+        704
+      ],
+      "notesInFlow": true,
+      "name": "🧹 Limpiar Estado Previo",
+      "id": "890e5c48-4b8b-48f8-b66c-66ae2816fd13",
+      "notes": "Organiza los datos del progreso anterior para que el sistema pueda compararlos fácilmente."
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\nconst filteredInventory = [];\nconst filesMap = {};\n\n// 1. Clasificar todo lo que viene de las dos ramas\nfor (const item of allItems) {\n  const j = item.json;\n  const key = j.matchKey;\n  if (!key) continue;\n\n  if (j.driveFileId) {\n    // Es un archivo real de Google Drive\n    if (!filesMap[key]) filesMap[key] = [];\n    filesMap[key].push(j);\n  }\n  if (j.PRODUCTO) {\n    // Es una fila del Inventario Sheets\n    filteredInventory.push(j);\n  }\n}\n\nconst output = [];\n// 2. Cruzar inventario con archivos de Drive\nconst globals = $('⚙️ Variables Globales').first().json;\nconst BATCH_LIMIT = parseInt(globals.BATCH_LIMIT || 30, 10); // LÍMITE DE SEGURIDAD DESDE VARIABLES GLOBALES\n\n// Contar el total de productos en cola con imagen\nlet totalEnCola = 0;\nfor (const p of filteredInventory) {\n  const key = p.matchKey;\n  if (filesMap[key] && filesMap[key].length > 0) {\n    totalEnCola++;\n  }\n}\n\nlet processedCount = 0;\nfor (const p of filteredInventory) {\n  const key = p.matchKey;\n  const productImages = filesMap[key] || [];\n  \n  // Si no hay imágenes en Drive para este producto, lo saltamos\n  if (productImages.length === 0) continue; \n\n  // Detener el procesamiento si alcanzamos el límite de productos en este ciclo\n  if (processedCount >= BATCH_LIMIT) break;\n  processedCount++;\n\n  // Ordenar variantes (la principal primero)\n  productImages.sort((a, b) => (a.preservedSuffix || '').length - (b.preservedSuffix || '').length);\n  \n  productImages.forEach((img, index) => {\n    output.push({\n      json: {\n        ...p, // Datos de precio y nombre del Sheets\n        ...img, // ID del archivo de Drive\n        photoIndex: index + 1,\n        totalPhotos: productImages.length,\n        isGallery: productImages.length > 1,\n        isFirstPhoto: index === 0,\n        folderName: p.PRODUCTO,\n        marca: 'yourbrand',\n        queueStats: {\n          totalEnCola: totalEnCola,\n          procesadosEnEstaEjecucion: Math.min(totalEnCola, BATCH_LIMIT),\n          pendientes: Math.max(0, totalEnCola - BATCH_LIMIT)\n        }\n      }\n    });\n  });\n}\n\nreturn output;"
+      },
+      "position": [
+        1504,
+        224
+      ],
+      "notesInFlow": true,
+      "name": "🧠 Motor de Decisión",
+      "typeVersion": 2,
+      "type": "n8n-nodes-base.code",
+      "id": "60e55d07-c661-4618-9d4a-7a4560f739ca",
+      "notes": "Cruza inventario con fotos, descarta lo ya procesado, agrupa galerías y pone las fotos en fila india para el bucle."
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "notesInFlow": true,
+      "typeVersion": 3,
+      "position": [
+        1984,
+        240
+      ],
+      "name": "🔁 Bucle de Procesamiento",
+      "id": "7a867d91-99f0-4cc2-b178-36e698fe2184",
+      "onError": "continueErrorOutput",
+      "notes": "Deja pasar una sola foto a la vez para que se le aplique el diseño gráfico sin saturar la memoria."
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "RLVkKKWYAp51LXtL",
+          "cachedResultUrl": "/workflow/RLVkKKWYAp51LXtL",
+          "cachedResultName": "Motor Render Universal (Sub-Workflow)",
+          "mode": "list"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "convertFieldsToString": true,
+          "schema": [],
+          "value": {
+            "value": {
+              "CATEGORÍA": "={{ $json.CATEGORÍA }}"
+            }
+          },
+          "attemptToConvertTypes": false,
+          "matchingColumns": []
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "name": "🎨 Diseñar Foto",
+      "notesInFlow": true,
+      "typeVersion": 1.3,
+      "position": [
+        2240,
+        256
+      ],
+      "id": "9db337fa-f47a-44dd-9c5a-0619e7f02f64",
+      "onError": "continueRegularOutput",
+      "notes": "Envía la foto cruda al Sub-flujo de Diseño Gráfico y espera a que regrese ya procesada y guardada en disco."
+    },
+    {
+      "parameters": {
+        "jsCode": "const folderMap = {\n  'ACCESORIO': '1C4kNBOb1uqvoF_NgbdnTTRbIRNfvEM-k',\n  'ACCESORIOS': '1C4kNBOb1uqvoF_NgbdnTTRbIRNfvEM-k',\n  'CARTERA': '1Ise_g2Z9MariEGvEJ3aVhoURhUsbkd81',\n  'CARTERAS': '1Ise_g2Z9MariEGvEJ3aVhoURhUsbkd81',\n  'ROPA': '1ny8RNFZKmUhUHhLoDrPGmaBkBOwTUmmF',\n  'ROPAS': '1ny8RNFZKmUhUHhLoDrPGmaBkBOwTUmmF',\n  'TECNOLOGIA': '1Jx27be3RkfP7z4k4X1h5KoUfaIhfTttJ',\n  'TECNOLOGIAS': '1Jx27be3RkfP7z4k4X1h5KoUfaIhfTttJ',\n  'ZAPATO': '1ODtHuzk51PQzsQKRWHpadewSJy9aDSs3',\n  'ZAPATOS': '1ODtHuzk51PQzsQKRWHpadewSJy9aDSs3'\n};\n\nconst items = $input.all();\nconst out = [];\n\nfor (const item of items) {\n  const json = item.json;\n  \n  // Extraemos la categoría directamente del dato original arrastrado desde el Excel\n  const categoria = (json['CATEGORÍA'] || json['CATEGORIA'] || 'DESCONOCIDA').toUpperCase().trim();\n  const folderId = folderMap[categoria];\n\n  // Si la categoría del Excel no coincide con ninguna carpeta de destino, bloqueamos el flujo\n  if (!folderId) {\n    throw new Error(`ERROR CRÍTICO: La categoría \"${categoria}\" para el producto \"${json.PRODUCTO || json.productId || 'Desconocido'}\" no existe en tu mapa de destino de Google Drive. Por favor, asegúrate de que esté bien escrita en el Excel.`);\n  }\n\n  const { categoryRaw, ...cleanJson } = json;\n\n  out.push({\n    json: {\n      ...cleanJson,\n      CATEGORÍA: categoria,\n      categoryFolderId: folderId\n    },\n     binary: item.binary\n  });\n}\n\nreturn out;"
+      },
+      "name": "📂 Asignar Carpeta Destino",
+      "typeVersion": 2,
+      "type": "n8n-nodes-base.code",
+      "position": [
+        2624,
+        224
+      ],
+      "notesInFlow": true,
+      "id": "2c99595f-ae05-459f-90e4-7fb207e27de3",
+      "notes": "Decide en qué carpeta de Google Drive debe guardarse la foto según su categoría."
+    },
+    {
+      "parameters": {
+        "jsCode": "const categories = $('📂 Listar Categorías (Drive)').all();\nconst categoryMap = {};\ncategories.forEach(c => {\n  categoryMap[c.json.id] = c.json.name;\n});\n\nconst sanitizeFileName = (str) => str ? String(str).replace(/[\"<>:/\\\\|?*]/g, '').replace(/\\s+/g, ' ').trim() : '';\n\nconst out = [];\nconst seenBaseKeys = new Set();\n\nfor (const item of $input.all()) {\n  const file = item.json;\n  const fileName = file.name;\n  if (!fileName) continue;\n  \n  const parentId = (file.parents && file.parents.length > 0) ? file.parents[0] : null;\n  const categoryRaw = categoryMap[parentId] || 'General';\n  \n  let cleanFileName = fileName;\n  if (cleanFileName.includes('/')) {\n    cleanFileName = cleanFileName.split('/').pop();\n  }\n  if (cleanFileName.includes('\\\\')) {\n    cleanFileName = cleanFileName.split('\\\\').pop();\n  }\n  \n  // Saneamiento de comillas y caracteres prohibidos\n  cleanFileName = sanitizeFileName(cleanFileName);\n  \n  // CORRECCIÓN QUIRÚRGICA: Limpiar la extensión respetando puntos internos (solo extensiones de imagen estándar)\n  let baseWithoutExt = cleanFileName;\n  const extMatch = cleanFileName.match(/\\.(jpe?g|png|webp|gif|jfif|bmp)$/i);\n  if (extMatch) {\n    baseWithoutExt = cleanFileName.slice(0, extMatch.index);\n  }\n  \n  // Normalizar para de-duplicar la misma imagen (p. ej. \"vestido\" y \"vestido.jpg\" son la misma)\n  const baseKey = baseWithoutExt.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n  if (seenBaseKeys.has(baseKey)) {\n    console.log('Ignorando duplicado de imagen para la base:', baseWithoutExt);\n    continue; // Salta esta imagen para no procesarla dos veces\n  }\n  seenBaseKeys.add(baseKey);\n  \n  let matchKeyRaw = baseWithoutExt;\n  let isVariant = false;\n  // Evitar falsos positivos como años (\"1997\") o capacidades (\"20.000MAH\" -> \"20\") al requerir delimitador de variante claro\n  const suffixMatch = baseWithoutExt.match(/\\s\\([2-9]\\)$/);\n  if (suffixMatch) {\n    isVariant = true;\n    matchKeyRaw = baseWithoutExt.substring(0, suffixMatch.index).trim();\n  }\n  \n  const fullMatchKey = baseWithoutExt.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n  const matchKey = matchKeyRaw.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n  \n  out.push({\n    json: {\n      driveFileId: file.id,\n      fileName: fileName,\n      cleanFileName: cleanFileName,\n      categoryRaw: categoryRaw,\n      matchKey: matchKey,\n      fullMatchKey: fullMatchKey,\n      isVariant: isVariant,\n      preservedSuffix: suffixMatch ? suffixMatch[0] : ''\n    }\n  });\n}\nreturn out;"
+      },
+      "name": "🧠 Identificar Variantes",
+      "typeVersion": 2,
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1136,
+        -240
+      ],
+      "notesInFlow": true,
+      "id": "c0c13762-a1f0-4040-83ff-298f9e9e7a2a",
+      "notes": "Analiza el nombre de cada foto para saber de qué producto es y si es la foto principal o una variante."
+    },
+    {
+      "parameters": {
+        "jsCode": "const logoBase64 = \"data:image/png;base64,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JtOirTA9/AbRDGlrkjXOaeAoaFmWNjFnnNTNZY26xgILLFDTDjRidWo0LDZeV6PIG21kSSxHEVNJBCoQJcdUHdvjMD4j9JWGrrEwjqAsEVhpJGbahe/YlkeC937hhReulWfzrWn8yzQd42I6e1klRUisYzfccMPa9TWPC+gkFPoLycuK8uOT2QQJm+DhVENRIbwD+X+a3I+s4p1dIplJPLV6YkccW2oEaDmJxjxXXXVVroapHhNzReWoLBqoGlSeB68pDUgMofLUpx3oXti0TcIUD9+JyHvuuWftNywGe17W52418RFHHBGb0vLW2uAPEZhgmiZjtjqkkZiOR/4JebqRW2+9tW4vKTpMOYSQvfbaK/6eEETeRVESpzlRNRzRs7vssstq95x3T69W19U8P0M8xuNSWMcee2yW64jE27lEMpN4SvXEjpDYDzWzIZd5I3J0HAELfll5TU69UEXe0FN2a/8lO/2hhkxebQV3qG78r3zb+AHyhJemaeLjjjsu/k4aUFqQsunMtttuuxoB84Rd+iRW/emM2EtagimrsidOnFj7XlM+gI60KIlVZzzEahfyBFOGOnh2FFGnpUyrZa3iwppQp2k3Osj47kTirV0imaeYnqme2NGdEAnl042p8Wiz7LzaZdlll629pFa50/+jawAAGeNJREFUq1vVy5p90oSddmypfLSPRE41f2rCamrmyLPWL43EBLDodxZzSGz8b57ldY1IbD32zME/99xztWsx1sdqktxzzz21Bg7KILHVtGuvvXZqGQwp1HnTnuz5RaFr+Ptgp20W2ADi4GYukcwkfsQroFSo91NjhMBFI62sBtMUjEzCyZMn11b+ZJ0e4pPGq9xdmJLy1uaZqsqze0Ta9AdjtC222CIOkMAjjPm32mqrxQTEMSJfAj6ErCu2mpGYa3O+EvIjeMPteXnvxSexfa8E9IhUPGvdDw4sNhOwxxYlse3gdb9MPfIsLRjWcU0b+8zUU9brZHkeTJlNmTIlLlur9DK2D3FwQ5dIZhLfXT2xI1NNejBEVal3KuqM0oPgeMWtFplz9l+89j9GFOCght6sLrbeeae2WAao50GjA/wtM1edHfdFo9czW2+99TI9s2bmtExmnDyazkEU5pn3fTQisX1G0vw2Kwtx6LqedfQVIbGOYVoK4Znp2dln6j9XBMciQRt53mOz58HUFc48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\";\n\nreturn $input.all().map(item => {\n  item.json.logoBase64 = logoBase64;\n  return item;\n});"
+      },
+      "name": "⚙️ Convertir Logo a Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        160
+      ],
+      "notesInFlow": true,
+      "id": "266886a4-2e05-45d2-9fc9-c0f1c53c4c97",
+      "notes": "Convierte el archivo binario del logo a texto Base64 para inyectarlo en el HTML posteriormente."
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "matchKey",
+        "options": {}
+      },
+      "name": "🔄 Merge Inventory & State",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        912,
+        240
+      ],
+      "id": "c9f497fe-3305-4c02-89ab-faa3518a98e2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ESTADO || \"\" }}",
+              "rightValue": "PROCESADA",
+              "operator": {
+                "operation": "notContains",
+                "type": "string"
+              }
+            },
+            {
+              "rightValue": "={{ parseFloat($json.precioUsdExistente || 0) }}",
+              "leftValue": "={{ parseFloat($json['ACTUAL USD'] || 0) }}",
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "leftValue": "={{ parseFloat($json['ACTUAL CUP'] || 0) }}",
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              },
+              "rightValue": "={{ parseFloat($json.precioCupExistente || 0) }}"
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "name": "🌪️ Filtro de Cambios",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        224
+      ],
+      "id": "22e945bd-c786-42dc-af41-19f899acfd45"
+    },
+    {
+      "parameters": {
+        "jsCode": "const categories = $input.all();\nconst rootId = '1gxj5OtOGF-m98S_2sC2xnDTBu5zRTiUX';\n\n// Extraemos los IDs de todas las subcarpetas encontradas\nconst ids = categories.map(c => \"'\" + c.json.id + \"' in parents\");\n\n// Añadimos la carpeta raíz por si hay fotos sueltas ahí\nids.push(\"'\" + rootId + \"' in parents\");\n\n// Construimos una mega-query para Google Drive (soporta miles de caracteres)\nconst query = \"(\" + ids.join(\" or \") + \") and mimeType contains 'image/' and trashed = false\";\n\n// Devolvemos 1 solo item para que el siguiente nodo de Drive se ejecute exactamente 1 vez\nreturn [{\n  json: {\n    driveQuery: query\n  }\n}];"
+      },
+      "name": "⚙️ Construir Query Drive",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        -240
+      ],
+      "id": "8505f268-2823-4b5e-859f-2fb496b847f0"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "'1gxj5OtOGF-m98S_2sC2xnDTBu5zRTiUX' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        "returnAll": true,
+        "filter": {},
+        "options": {}
+      },
+      "name": "📂 Listar Categorías (Drive)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        112,
+        -240
+      ],
+      "id": "0545f0e3-06c0-4d11-a670-4cf0368edd48",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "={{ $json.driveQuery }}",
+        "returnAll": true,
+        "filter": {},
+        "options": {}
+      },
+      "name": "🔍 Listar Fotos (Drive)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        608,
+        -240
+      ],
+      "id": "3c0e3d4b-4a3c-4dc9-adc9-e25752a52ae5",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "={{ $json.productId }}{{ $json.preservedSuffix || '' }}.png",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('📂 Asignar Carpeta Destino').item.json.categoryFolderId }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "name": "☁️ Subir Foto Única (Drive)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2816,
+        224
+      ],
+      "retryOnFail": false,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "id": "1f25ab2b-67c5-44d3-8cf9-c549a39e96f5",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=1625431215#gid=1625431215",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=1625431215#gid=1625431215",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "name": "Get row(s) in sheet (Rebajas)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        80,
+        -16
+      ],
+      "id": "667361da-9065-47fb-8c88-0241e6f5f812",
+      "credentials": {
+        "googleApi": {
+          "id": "b8wghPeWNy41uIJM",
+          "name": "Google Drive account 6"
+        }
+      },
+      "maxTries": 5,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Filtrar filas vacías primero\nconst validItems = $input.all().filter(item => {\n  const row = item.json;\n  const name = row['PRODUCTO'] ? String(row['PRODUCTO']).trim() : '';\n  return name.length > 0;\n});\n\n// 2. Procesar solo los ítems válidos\nreturn validItems.map(item => {\n  const row = item.json;\n  const name = String(row['PRODUCTO']).trim();\n  // Limpieza agresiva de caracteres y tildes para generar una llave exacta\n  const matchKey = name.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n  \n  return { \n    json: { \n      ...row, \n      matchKey: matchKey,\n      newUsd: parseFloat(String(row['N. USD'] || '0').replace(/[^0-9.]/g, '')) || 0,\n      newCup: parseFloat(String(row['N. CUP'] || '0').replace(/[^0-9.]/g, '')) || 0\n    } \n  };\n});"
+      },
+      "name": "🧹 Limpiar Rebajas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        -32
+      ],
+      "id": "956511cc-fc70-4d99-96fc-1ef1e8bd0b42"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- LÓGICA DE UNIFICACIÓN ROBUSTA (Referencias Absolutas) ---\n\n// 1. Extraemos los datos por NOMBRE DE NODO para evitar colisión de cables (n8n bug)\nconst inventory = $('💱 Recalcular Precio CUP').all().map(i => i.json);\n\nlet sales = [];\ntry {\n    sales = $('🧹 Limpiar Rebajas').all().map(i => i.json);\n} catch (e) {\n    // Si no hay rebajas, sales se queda vacío\n}\n\n// 2. Construcción del Mapa de Rebajas Manuales (VIP)\nconst salesMap = {};\nfor (const s of sales) { \n    if (s.matchKey && typeof s.matchKey === 'string' && s.matchKey.length > 0) {\n        salesMap[s.matchKey] = s; \n    }\n}\n\nconst formatUsd = (val) => {\n    const num = parseFloat(val);\n    if (isNaN(num)) return '$0.00 USD';\n    return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD';\n};\n\nconst formatCup = (val) => {\n    const num = parseFloat(val);\n    if (isNaN(num)) return '$0 CUP';\n    return '$' + num.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' CUP';\n};\n\n// 3. Procesamiento del Inventario\nreturn inventory.map(p => {\n    // Verificación exacta en el mapa de rebajas manuales\n    const sale = (p.matchKey && typeof p.matchKey === 'string') ? salesMap[p.matchKey] : null;\n    \n    // Lógica de Rebaja Natural (Historial)\n    const actualCup = parseFloat(p['ACTUAL CUP']) || 0;\n    const actualUsd = parseFloat(p['ACTUAL USD']) || 0;\n    const maxCup = parseFloat(p['MAX HIST CUP']) || 0;\n    const maxUsd = parseFloat(p['MAX HIST USD']) || 0;\n    const isNaturalSale = (maxUsd > actualUsd) || (maxCup > actualCup);\n\n    // RECONSTRUCCIÓN INMUTABLE DEL OBJETO\n    let itemFinal = { ...p };\n\n    if (sale) {\n        // ES UNA REBAJA ESPECIAL (VERDE)\n        itemFinal.specialSale = true;\n        itemFinal.isSale = true;\n        itemFinal.hasDiscount = true;\n\n        // Sobreescribimos precios con los de la hoja de rebajas\n        itemFinal.oldUsdPrice = itemFinal.oldUsdPrice || itemFinal.usdPrice || 0;\n        itemFinal.oldCupPrice = itemFinal.oldCupPrice || itemFinal.cupPrice || 0;\n        itemFinal.maxUsdFormatted = formatUsd(itemFinal.oldUsdPrice);\n        itemFinal.maxCupFormatted = formatCup(itemFinal.oldCupPrice);\n\n        itemFinal.usdPrice = sale.newUsd || 0;\n        itemFinal.cupPrice = sale.newCup || 0;\n        itemFinal.usdFormatted = formatUsd(itemFinal.usdPrice);\n        itemFinal.cupFormatted = formatCup(itemFinal.cupPrice);\n\n        const diffUsd = itemFinal.oldUsdPrice - itemFinal.usdPrice;\n        const diffCup = itemFinal.oldCupPrice - itemFinal.cupPrice;\n        itemFinal.diffUsdFormatted = diffUsd > 0 ? '-' + formatUsd(diffUsd) : null;\n        itemFinal.diffCupFormatted = diffCup > 0 ? '-' + formatCup(diffCup) : null;\n    } else {\n        // NO ES REBAJA ESPECIAL (Normal o Roja)\n        itemFinal.specialSale = false;\n        itemFinal.isSale = isNaturalSale;\n        itemFinal.hasDiscount = isNaturalSale;\n        \n        // Mantenemos precios originales\n        itemFinal.oldUsdPrice = itemFinal.oldUsdPrice || itemFinal.usdPrice || 0;\n        itemFinal.oldCupPrice = itemFinal.oldCupPrice || itemFinal.cupPrice || 0;\n        \n        if (!isNaturalSale) {\n            itemFinal.diffUsdFormatted = null;\n            itemFinal.diffCupFormatted = null;\n        }\n    }\n\n    return { json: itemFinal };\n});"
+      },
+      "name": "📦 Unificar Precios y Rebajas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        -32
+      ],
+      "id": "1681da51-9e1f-4ad4-945d-6798b3ea202f"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=name contains '{{ $('📂 Asignar Carpeta Destino').item.json.productId }}' and '{{ $('📂 Asignar Carpeta Destino').item.json.categoryFolderId }}' in parents and trashed = false",
+        "returnAll": true,
+        "filter": {},
+        "options": {}
+      },
+      "name": "🔍 Buscar Duplicados (Drive)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3312,
+        32
+      ],
+      "alwaysOutputData": true,
+      "id": "2b8c4bf0-c8b7-46d5-9fc8-ddd3a4104ba2",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "deleteFile",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "name": "🗑️ Eliminar Duplicados (Drive)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4096,
+        16
+      ],
+      "id": "994bef64-8491-4e59-9d07-e941a9ee1baf",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('📂 Asignar Carpeta Destino').item.json;\nconst uploadData = $('☁️ Subir Foto Única (Drive)').item.json;\nreturn [{\n    json: { ...data, newDriveId: uploadData.id, webViewLink: uploadData.webViewLink },\n    pairedItem: { item: 0 }\n}];"
+      },
+      "name": "⚙️ Restaurar Contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4368,
+        240
+      ],
+      "id": "eec487b5-4052-44ae-9b52-a432dfc663c1"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724",
+          "mode": "url"
+        },
+        "sheetName": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724",
+          "__rl": true,
+          "mode": "url"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ESTADO": "PENDIENTE",
+            "PRODUCTO": "={{ ($json.PRODUCTO + ' ' + ($json.preservedSuffix || '')).trim() }}",
+            "DRIVE_ID": "={{ $('☁️ Subir Foto Única (Drive)').item.json.id }}",
+            "FECHA_SOLICITUD": "={{ $now.setZone('America/Havana').toFormat('yyyy-MM-dd HH:mm:ss') }}",
+            "CATEGORIA": "={{ $('🔁 Bucle de Procesamiento').item.json['CATEGORÍA'] }}"
+          },
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "schema": [
+            {
+              "displayName": "PRODUCTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "DRIVE_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "FECHA_SOLICITUD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "FECHA_ENVIO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "displayName": "CATEGORIA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Encolar Foto Única",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4576,
+        240
+      ],
+      "id": "3b65a9a5-f244-4731-8613-90a7657e19c3",
+      "credentials": {
+        "googleApi": {
+          "id": "b8wghPeWNy41uIJM",
+          "name": "Google Drive account 6"
+        }
+      },
+      "maxTries": 5,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "combinator": "or",
+          "conditions": [
+            {
+              "leftValue": "={{ $('📂 Asignar Carpeta Destino').item.json.isGallery }}",
+              "operator": {
+                "operation": "false",
+                "type": "boolean",
+                "singleValue": true
+              }
+            },
+            {
+              "leftValue": "={{ $('📂 Asignar Carpeta Destino').item.json.isFirstPhoto }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "🔀 ¿Evaluar Duplicados?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3152,
+        224
+      ],
+      "id": "2bbcf138-70e6-4110-b017-8c4564f47b89"
+    },
+    {
+      "parameters": {
+        "jsCode": "const searchResults = $input.all();\nconst uploadItems = $('☁️ Subir Foto Única (Drive)').all();\nconst uploadIds = uploadItems.map(item => item.json.id);\n\nconst productId = $('📂 Asignar Carpeta Destino').item.json.productId.trim().toUpperCase();\n\nconst obsoleteFiles = [];\n\nfor (const file of searchResults) {\n    const fileName = file.json.name;\n    const fileId = file.json.id;\n    \n    if (!fileId || !fileName) continue;\n    \n    // Normalize file name: remove extension and variant suffixes like (2), _2, -2\n    const normName = fileName.substring(0, fileName.lastIndexOf('.'))\n        .replace(/\\s*\\(\\d+\\)\\s*$/, '')\n        .replace(/\\s*-\\s*\\d+\\s*$/, '')\n        .replace(/\\s*_\\s*\\d+\\s*$/, '')\n        .trim()\n        .toUpperCase();\n        \n    // If it belongs to this product and is NOT one of our newly uploaded file IDs\n    if (normName === productId && !uploadIds.includes(fileId)) {\n        obsoleteFiles.push({\n            json: { id: fileId, name: fileName },\n            pairedItem: { item: 0 }\n        });\n    }\n}\n\nif (obsoleteFiles.length > 0) {\n    return obsoleteFiles;\n} else {\n    // Always return at least 1 item to prevent loop blocking!\n    return [{\n        json: { skipDelete: true },\n        pairedItem: { item: 0 }\n    }];\n}"
+      },
+      "name": "⚙️ Filtrar Duplicados Obsoletos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3536,
+        32
+      ],
+      "id": "d964c8e9-bbad-4735-8fa8-d2367c7b710e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "type": "string",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "🔀 ¿Borrar Duplicados?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3776,
+        32
+      ],
+      "id": "a52f694d-fa80-44ba-b9b2-6f015051f5c0"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "name": "⏰ Cron Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1232,
+        320
+      ],
+      "id": "5a03797d-fe09-44c3-abdf-ca0b98d76a67"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.green-api.com/waInstance{{ $('⚙️ Variables Globales').first().json.GREEN_API_INSTANCE_ID }}/sendMessage/{{ $('⚙️ Variables Globales').first().json.GREEN_API_TOKEN }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chatId\": \"{{ $('⚙️ Variables Globales').first().json.GREEN_API_CHAT_ID }}\",\n  \"message\": \"✅ *YourBrand Batch Completado*\\n\\nSe ha completado el ciclo de procesamiento de imágenes.\\n\\n📊 *Estado del Inventario:*\\n🔹 Total detectado con cambios: {{ $('🧠 Motor de Decisión').first().json.queueStats.totalEnCola }} productos\\n⚡ Procesados en este ciclo: {{ $('🧠 Motor de Decisión').first().json.queueStats.procesadosEnEstaEjecucion }} productos\\n⏳ Quedan pendientes en cola: {{ $('🧠 Motor de Decisión').first().json.queueStats.pendientes }} productos\\n\\n📅 Fecha: {{ $now.setZone('America/Havana').toFormat('yyyy-MM-dd HH:mm:ss') }}\"\n}",
+        "options": {}
+      },
+      "name": "📱 Notif: Inicio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2576,
+        -112
+      ],
+      "executeOnce": true,
+      "id": "faff9011-57de-4334-bd43-0732d9252c07"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ !$json.error }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "🔀 ¿Diseño Exitoso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2432,
+        432
+      ],
+      "id": "d0c8aab4-0ea7-431b-9d23-f2f28c817aba"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.green-api.com/waInstance{{ $('⚙️ Variables Globales').first().json.GREEN_API_INSTANCE_ID }}/sendMessage/{{ $('⚙️ Variables Globales').first().json.GREEN_API_TOKEN }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chatId\": \"{{ $('⚙️ Variables Globales').first().json.GREEN_API_CHAT_ID }}\",\n  \"message\": \"⚠️ *Error de Diseño en YourBrand Batch*\\n📌 Producto: {{ $json.PRODUCTO || $json.productId || 'Desconocido' }}\\n❌ Fase: 🎨 Diseñar Foto\\n💬 Detalle: {{ $json.error?.message || 'Error indeterminado en Puppeteer/Render' }}\\n🔄 Se marcará como FALLIDO y el flujo continuará con el siguiente.\"\n}",
+        "options": {}
+      },
+      "name": "📱 Notif: Error Diseño",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2608,
+        912
+      ],
+      "id": "dfd9c937-7f7a-4295-aeae-5a2b68b76278"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271"
+        },
+        "sheetName": {
+          "mode": "url",
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PRODUCTO": "={{ $json.PRODUCTO }}",
+            "ESTADO": "FALLIDO"
+          },
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "schema": [
+            {
+              "displayName": "PRODUCTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2848,
+        912
+      ],
+      "name": "Update Sheets Design Fail",
+      "alwaysOutputData": true,
+      "id": "ade7a48e-934a-433c-971b-917d847c327d",
+      "credentials": {
+        "googleApi": {
+          "id": "b8wghPeWNy41uIJM",
+          "name": "Google Drive account 6"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ !$json.error }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "🔀 ¿Subida Exitosa?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2960,
+        432
+      ],
+      "id": "9e548e77-51ee-4352-a82e-ed1b1180a3a6"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.green-api.com/waInstance{{ $('⚙️ Variables Globales').first().json.GREEN_API_INSTANCE_ID }}/sendMessage/{{ $('⚙️ Variables Globales').first().json.GREEN_API_TOKEN }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chatId\": \"{{ $('⚙️ Variables Globales').first().json.GREEN_API_CHAT_ID }}\",\n  \"message\": \"⚠️ *Error de Google Drive en YourBrand Batch*\\n📌 Producto: {{ $json.PRODUCTO || $json.productId || 'Desconocido' }}\\n❌ Fase: ☁️ Subir Foto Única (Drive)\\n💬 Detalle: {{ $json.error?.message || 'Error indeterminado en la subida a Google Drive' }}\\n🔄 Se marcará como FALLIDO en Sheets y se continuará con el siguiente.\"\n}",
+        "options": {}
+      },
+      "name": "📱 Notif: Error Subida",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3504,
+        912
+      ],
+      "id": "33789d2f-653b-4520-9896-00c59dea579b"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271"
+        },
+        "sheetName": {
+          "mode": "url",
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PRODUCTO": "={{ $json.PRODUCTO }}",
+            "ESTADO": "FALLIDO"
+          },
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "schema": [
+            {
+              "displayName": "PRODUCTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3728,
+        912
+      ],
+      "name": "Update Sheets Upload Fail",
+      "alwaysOutputData": true,
+      "id": "c0c55b5b-e7ba-495f-9e88-515bb77e9c19",
+      "credentials": {
+        "googleApi": {
+          "id": "b8wghPeWNy41uIJM",
+          "name": "Google Drive account 6"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "### 🚀 ETAPA 1: INICIALIZACIÓN\nEstablece los disparadores (manual/recurrente), define las variables globales de tasa CUP y credenciales, y lee/codifica el logo oficial de YourBrand en Base64 para usarlo de marca de agua en las imágenes.",
+        "height": 350,
+        "width": 750,
+        "color": 5
+      },
+      "name": "📝 Nota: Inicialización",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1280,
+        80
+      ],
+      "id": "6edc8217-fbe2-4b1e-8d99-27914138c584"
+    },
+    {
+      "parameters": {
+        "content": "### 📥 ETAPA 2: CARGA E INTEGRACIÓN DE DATOS\nDescarga en paralelo:\n1. El inventario de productos (Sheets).\n2. El registro histórico de procesamiento (Sheets, evita duplicar trabajo).\n3. El catálogo de fotos de Drive (identifica variantes y sufijos).\n4. Las ofertas y descuentos especiales (Sheets Rebajas).\n\n**Unificación:** Sanea los datos y calcula precios dinámicos duales (USD/CUP) con ofertas manuales.",
+        "height": 1420,
+        "width": 1474,
+        "color": 4
+      },
+      "name": "📝 Nota: Carga de Datos",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        -448
+      ],
+      "id": "b3ed3b0d-0ba2-45d8-bb74-91d1ae01213a"
+    },
+    {
+      "parameters": {
+        "content": "### 🧠 ETAPA 3: MOTOR DE DECISIÓN\n1. Filtra productos descartando los ya procesados sin cambios de precio.\n2. Cruza exactamente las fotos de Drive con el inventario.\n3. Agrupa galerías de variantes y las ordena para el bucle.",
+        "height": 350,
+        "width": 530,
+        "color": 6
+      },
+      "name": "📝 Nota: Motor de Decisión",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        80
+      ],
+      "id": "40132678-b162-400e-96cf-8a7a55c2db61"
+    },
+    {
+      "parameters": {
+        "content": "### 🔁 ETAPA 4: BUCLE DE PROCESAMIENTO (1 A 1)\nProcesa secuencialmente cada foto:\n- **Diseño:** Genera la tarjeta con marca de agua y precio dual (Puppeteer).\n- **Drive:** Sube la foto procesada a su carpeta de categoría correspondiente.\n- **Deduplicación:** Elimina imágenes obsoletas del mismo producto para evitar duplicados.\n- **Estado:** Encola para Telegram y marca el inventario como `PROCESADA` con fórmula de miniatura.",
+        "height": 888,
+        "width": 2980,
+        "color": 7
+      },
+      "name": "📝 Nota: El Bucle",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1776,
+        -368
+      ],
+      "id": "7659bff7-dbd4-4b10-93f7-3ba0b9e02e54"
+    },
+    {
+      "parameters": {
+        "content": "### 🛡️ ETAPA 5: GESTIÓN DE ERRORES\nSi ocurre un fallo en la generación de la foto o la subida a Drive:\n1. Captura el error de forma segura (`continueOnFail`).\n2. Envía alerta inmediata a WhatsApp con los detalles del fallo.\n3. Registra el estado del producto como `FALLIDO` en Sheets.\n4. Retorna de forma lineal al Bucle para continuar con la cola sin atascar el flujo.",
+        "height": 350,
+        "width": 1572,
+        "color": 2
+      },
+      "name": "📝 Nota: Control de Errores",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        736
+      ],
+      "id": "901598e8-1840-4922-bbe3-17b63259ca90"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271"
+        },
+        "sheetName": {
+          "mode": "url",
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CODIGO": "={{ $('📂 Asignar Carpeta Destino').item.json['CÓDIGO'] }}",
+            "PRODUCTO": "={{ $('📂 Asignar Carpeta Destino').item.json.PRODUCTO }}",
+            "IMG": "==HYPERLINK(\"{{ $('☁️ Subir Foto Única (Drive)').item.json.webViewLink }}\", IMAGE(\"https://drive.google.com/thumbnail?id={{ $('☁️ Subir Foto Única (Drive)').item.json.id }}\"))",
+            "ESTADO": "PROCESADA",
+            "row_number": 0,
+            "P. ACTUAL USD": "={{ $('📂 Asignar Carpeta Destino').item.json[\"ACTUAL USD\"] }}",
+            "P. ACTUAL CUP": "={{ $('📂 Asignar Carpeta Destino').item.json[\"ACTUAL CUP\"] }}"
+          },
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "schema": [
+            {
+              "displayName": "CODIGO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "PRODUCTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "P. ACTUAL USD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "P. ACTUAL CUP",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "IMG",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4768,
+        240
+      ],
+      "name": "📝 Marcar PROCESADA",
+      "alwaysOutputData": true,
+      "id": "adee87bb-7462-4371-b005-204a0fe92536",
+      "credentials": {
+        "googleApi": {
+          "id": "b8wghPeWNy41uIJM",
+          "name": "Google Drive account 6"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "📂 Asignar Carpeta Destino": {
+      "main": [
+        [
+          {
+            "node": "☁️ Subir Foto Única (Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧠 Motor de Decisión": {
+      "main": [
+        [
+          {
+            "node": "🔁 Bucle de Procesamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏳ Esperar Inventario": {
+      "main": [
+        [
+          {
+            "node": "🧠 Motor de Decisión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧠 Identificar Variantes": {
+      "main": [
+        [
+          {
+            "index": 1,
+            "node": "⏳ Esperar Inventario",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "💲 Formatear Precios y Tallas": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "🔀 ¿Aplicar Tasa de Cambio?"
+          }
+        ]
+      ]
+    },
+    "▶️ Inicio Manual": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Variables Globales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 Leer Inventario Sheets": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "💲 Formatear Precios y Tallas"
+          }
+        ]
+      ]
+    },
+    "📋 Leer Estado de Progreso": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "🧹 Limpiar Estado Previo",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "🔀 ¿Aplicar Tasa de Cambio?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "💱 Recalcular Precio CUP"
+          }
+        ],
+        [
+          {
+            "node": "📦 Unificar Precios y Rebajas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Variables Globales": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "⚙️ Convertir Logo a Base64"
+          }
+        ]
+      ]
+    },
+    "🎨 Diseñar Foto": {
+      "main": [
+        [
+          {
+            "node": "🔀 ¿Diseño Exitoso?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧹 Limpiar Estado Previo": {
+      "main": [
+        [
+          {
+            "node": "🔄 Merge Inventory & State",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🔁 Bucle de Procesamiento": {
+      "main": [
+        [
+          {
+            "node": "📱 Notif: Inicio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🎨 Diseñar Foto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Convertir Logo a Base64": {
+      "main": [
+        [
+          {
+            "node": "📊 Leer Inventario Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📋 Leer Estado de Progreso",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📂 Listar Categorías (Drive)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get row(s) in sheet (Rebajas)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🌪️ Filtro de Cambios": {
+      "main": [
+        [
+          {
+            "node": "⏳ Esperar Inventario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📂 Listar Categorías (Drive)": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Construir Query Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Construir Query Drive": {
+      "main": [
+        [
+          {
+            "node": "🔍 Listar Fotos (Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 Listar Fotos (Drive)": {
+      "main": [
+        [
+          {
+            "node": "🧠 Identificar Variantes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 Merge Inventory & State": {
+      "main": [
+        [
+          {
+            "node": "🌪️ Filtro de Cambios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet (Rebajas)": {
+      "main": [
+        [
+          {
+            "node": "🧹 Limpiar Rebajas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧹 Limpiar Rebajas": {
+      "main": [
+        [
+          {
+            "node": "📦 Unificar Precios y Rebajas",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "💱 Recalcular Precio CUP": {
+      "main": [
+        [
+          {
+            "node": "📦 Unificar Precios y Rebajas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 Unificar Precios y Rebajas": {
+      "main": [
+        [
+          {
+            "node": "🔄 Merge Inventory & State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "☁️ Subir Foto Única (Drive)": {
+      "main": [
+        [
+          {
+            "node": "🔀 ¿Subida Exitosa?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 Buscar Duplicados (Drive)": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Filtrar Duplicados Obsoletos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗑️ Eliminar Duplicados (Drive)": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Restaurar Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encolar Foto Única": {
+      "main": [
+        [
+          {
+            "node": "📝 Marcar PROCESADA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Restaurar Contexto": {
+      "main": [
+        [
+          {
+            "node": "Encolar Foto Única",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 ¿Evaluar Duplicados?": {
+      "main": [
+        [
+          {
+            "node": "🔍 Buscar Duplicados (Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "⚙️ Restaurar Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Filtrar Duplicados Obsoletos": {
+      "main": [
+        [
+          {
+            "node": "🔀 ¿Borrar Duplicados?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 ¿Borrar Duplicados?": {
+      "main": [
+        [
+          {
+            "node": "🗑️ Eliminar Duplicados (Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "⚙️ Restaurar Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏰ Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Variables Globales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 ¿Diseño Exitoso?": {
+      "main": [
+        [
+          {
+            "node": "📂 Asignar Carpeta Destino",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📱 Notif: Error Diseño",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Notif: Error Diseño": {
+      "main": [
+        [
+          {
+            "node": "Update Sheets Design Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Sheets Design Fail": {
+      "main": [
+        [
+          {
+            "node": "🔁 Bucle de Procesamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 ¿Subida Exitosa?": {
+      "main": [
+        [
+          {
+            "node": "🔀 ¿Evaluar Duplicados?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📱 Notif: Error Subida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Notif: Error Subida": {
+      "main": [
+        [
+          {
+            "node": "Update Sheets Upload Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Sheets Upload Fail": {
+      "main": [
+        [
+          {
+            "node": "🔁 Bucle de Procesamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 Marcar PROCESADA": {
+      "main": [
+        [
+          {
+            "node": "🔁 Bucle de Procesamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:⏰ Cron Trigger": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "fde61c9d-90f5-4ce2-85fb-d4d995787282",
+  "activeVersionId": "fde61c9d-90f5-4ce2-85fb-d4d995787282",
+  "versionCounter": 1457,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-04-10T10:50:31.761Z",
+      "createdAt": "2026-04-10T10:50:31.761Z",
+      "role": "workflow:owner",
+      "workflowId": "6FHeLxLFNFDoYyoh",
+      "projectId": "ms8tH4wh3FFjxTYT",
+      "project": {
+        "updatedAt": "2026-04-10T09:30:13.916Z",
+        "createdAt": "2026-04-10T09:12:09.604Z",
+        "id": "ms8tH4wh3FFjxTYT",
+        "name": "alvaro ruiz <yourbrandredes@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "51ee2f38-a3fc-4b00-b883-60cca3d92c58"
+      }
+    }
+  ],
+  "tags": []
+}

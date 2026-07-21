@@ -1,0 +1,279 @@
+{
+  "name": "YourDulceria: Generación de Catálogo",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-manual",
+      "name": "Manual Trigger",
+      "position": [0, 144],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "command": "find \"/data/yourdulceria/catalogo yourdulceria\" -maxdepth 1 -type f -not -path \"*/.*\""
+      },
+      "id": "execute-find-command",
+      "name": "Leer Fotos YourDulceria",
+      "position": [400, 0],
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json.stdout;\nif (!result) return [];\n\nconst lines = result.split('\\n').filter(l => l.trim() !== '');\nconst EXT = /\\.(jpg|jpeg|png|webp|gif)$/i;\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str)\n    .normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\")\n    .toUpperCase()\n    .replace(/[^A-Z0-9]/g, '');\n}\n\nconst out = [];\nfor (const fullPath of lines) {\n  if (!EXT.test(fullPath)) continue;\n  const fileName = fullPath.split('/').pop();\n  const baseName = fileName.replace(/\\.[^.]+$/i, '');\n  const matchKey = normalizeName(baseName);\n  \n  out.push({ json: { path: fullPath, fileName, matchKey } });\n}\nreturn out;"
+      },
+      "id": "code-parse-paths",
+      "name": "Parsear Fotos",
+      "position": [600, 0],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const categories = ['CARAMELOS', 'CHOCOLATES', 'GALLETAS', 'GOMITAS', 'PALETAS', 'BOMBONES', 'TURRONES', 'MALVAVISCOS'];\nconst results = [];\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str)\n    .normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\")\n    .toUpperCase()\n    .replace(/[^A-Z0-9]/g, '');\n}\n\nreturn [{ json: { msg: 'start' } }];"
+      },
+      "id": "placeholder-data",
+      "name": "Init Data",
+      "position": [200, 272],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex",
+        "options": {}
+      },
+      "id": "merge-data",
+      "name": "Unir Todo",
+      "position": [850, 144],
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst seenCategories = {};\nconst out = [];\n\nconst categories = ['CARAMELOS', 'CHOCOLATES', 'GALLETAS', 'GOMITAS', 'PALETAS', 'BOMBONES', 'TURRONES', 'MALVAVISCOS'];\n\nlet priceBase = 150;\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i].json;\n  const catIndex = i % categories.length;\n  const category = categories[catIndex];\n  \n  if (!seenCategories[category]) seenCategories[category] = 0;\n  \n  if (seenCategories[category] < 10) {\n    seenCategories[category]++;\n    \n    const priceCup = priceBase + (i * 10);\n    const priceUsd = (priceCup / 150).toFixed(2);\n    \n    out.push({\n      json: {\n        ...item,\n        category,\n        productId: item.fileName.replace(/\\.[^.]+$/i, ''),\n        cupFormatted: priceCup.toLocaleString() + ' CUP',\n        usdFormatted: priceUsd + ' USD'\n      }\n    });\n  }\n}\n\nreturn out;"
+      },
+      "id": "filter-and-price",
+      "name": "Filtrar 10 x Tipo + Precios",
+      "position": [1050, 144],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop",
+      "name": "Loop YourDulceria",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1250, 144]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.path }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "read-image",
+      "name": "Leer Imagen",
+      "position": [1450, 144],
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "width": 840,
+        "height": 840,
+        "options": {}
+      },
+      "id": "resize-product",
+      "name": "Redimensionar Producto",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [1650, 144]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "dataPropertyName": "bg",
+        "backgroundColor": "#B22222",
+        "width": 1200,
+        "height": 1200,
+        "options": {}
+      },
+      "id": "create-bg",
+      "name": "Fondo Rojo YourDulceria",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [1850, 144]
+    },
+    {
+      "parameters": {
+        "operation": "draw",
+        "dataPropertyName": "bg",
+        "color": "#FFD700",
+        "startPositionX": 0,
+        "startPositionY": 1000,
+        "endPositionX": 1200,
+        "endPositionY": 1200,
+        "options": {}
+      },
+      "id": "draw-gold-box",
+      "name": "Zócalo Dorado",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [2050, 144]
+    },
+    {
+      "parameters": {
+        "operation": "composite",
+        "dataPropertyName": "bg",
+        "dataPropertyNameComposite": "data",
+        "positionX": 180,
+        "positionY": 100,
+        "options": {}
+      },
+      "id": "montar-product",
+      "name": "Montar Producto",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [2250, 144]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "dataPropertyName": "bg",
+        "text": "={{ $json.productId }}",
+        "fontSize": 48,
+        "fontColor": "#B22222",
+        "positionX": 60,
+        "positionY": 1030,
+        "options": {}
+      },
+      "id": "text-nombre",
+      "name": "Nombre Producto",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [2450, 144]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "dataPropertyName": "bg",
+        "text": "={{ $json.cupFormatted }} | {{ $json.usdFormatted }}",
+        "fontSize": 56,
+        "fontColor": "#000000",
+        "positionX": 60,
+        "positionY": 1100,
+        "options": {}
+      },
+      "id": "text-precios",
+      "name": "Precios YourDulceria",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [2650, 144]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/yourdulceria/productosProcesados/{{ $json.category }}/{{ $json.fileName }}",
+        "options": {
+          "appendToFile": false
+        }
+      },
+      "id": "guardar",
+      "name": "Guardar Dulce",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [2850, 144]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          { "node": "Leer Fotos YourDulceria", "type": "main", "index": 0 },
+          { "node": "Init Data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Leer Fotos YourDulceria": {
+      "main": [
+        [{ "node": "Parsear Fotos", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parsear Fotos": {
+      "main": [
+        [{ "node": "Unir Todo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Init Data": {
+      "main": [
+        [{ "node": "Unir Todo", "type": "main", "index": 1 }]
+      ]
+    },
+    "Unir Todo": {
+      "main": [
+        [{ "node": "Filtrar 10 x Tipo + Precios", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filtrar 10 x Tipo + Precios": {
+      "main": [
+        [{ "node": "Loop YourDulceria", "type": "main", "index": 0 }]
+      ]
+    },
+    "Loop YourDulceria": {
+      "main": [
+        [],
+        [{ "node": "Leer Imagen", "type": "main", "index": 0 }]
+      ]
+    },
+    "Leer Imagen": {
+      "main": [
+        [{ "node": "Redimensionar Producto", "type": "main", "index": 0 }]
+      ]
+    },
+    "Redimensionar Producto": {
+      "main": [
+        [{ "node": "Fondo Rojo YourDulceria", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fondo Rojo YourDulceria": {
+      "main": [
+        [{ "node": "Zócalo Dorado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Zócalo Dorado": {
+      "main": [
+        [{ "node": "Montar Producto", "type": "main", "index": 0 }]
+      ]
+    },
+    "Montar Producto": {
+      "main": [
+        [{ "node": "Nombre Producto", "type": "main", "index": 0 }]
+      ]
+    },
+    "Nombre Producto": {
+      "main": [
+        [{ "node": "Precios YourDulceria", "type": "main", "index": 0 }]
+      ]
+    },
+    "Precios YourDulceria": {
+      "main": [
+        [{ "node": "Guardar Dulce", "type": "main", "index": 0 }]
+      ]
+    },
+    "Guardar Dulce": {
+      "main": [
+        [{ "node": "Loop YourDulceria", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null
+}

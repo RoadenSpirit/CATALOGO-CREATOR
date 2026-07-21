@@ -1,0 +1,189 @@
+{
+  "name": "Motor Render Universal (Sub-Workflow)",
+  "description": null,
+  "nodes": [
+    {
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "name": "Read Files & Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst items = $input.all();\nif (items.length === 0) throw new Error('Input vacío en Motor Render');\nconst item = items[0].json;\n\nlet logoPath = item.logoPath || '/data/logo2.jpeg';\nlet productoPath = item.productoPath || item.path;\nconst marca = item.marca || 'yourbrand';\n\nif (item.parameter && Array.isArray(item.parameter)) {\n  item.parameter.forEach(p => {\n    if (p.name === 'productoPath') productoPath = p.value;\n    if (p.name === 'logoPath') logoPath = p.value;\n  });\n}\n\nif (!productoPath) throw new Error('Faltan rutas de origen (productoPath/path)');\n\nconst category = item.categoryRaw || 'Sin_Categoria';\nconst fileName = item.fileName || path.basename(productoPath);\nconst destinoPath = `/data/fotosProcesadas/${marca}/${category}/${fileName}`;\n\nconst targetDir = path.dirname(destinoPath);\nif (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });\n\ntry {\n  const logoBuffer = fs.readFileSync(logoPath);\n  const prodBuffer = fs.readFileSync(productoPath);\n\n  if (!logoBuffer) throw new Error('LOGO no cargó');\n  if (!prodBuffer) throw new Error('PRODUCTO no cargó');\n\n  const getMime = (p) => {\n    const ext = path.extname(p).toLowerCase();\n    return (ext === '.png') ? 'image/png' : (ext === '.webp') ? 'image/webp' : 'image/jpeg';\n  };\n\n  return [{\n    json: {\n      ...item,\n      logoBase64: logoBuffer.toString('base64'),\n      productoBase64: prodBuffer.toString('base64'),\n      logoMime: getMime(logoPath),\n      productoMime: getMime(productoPath),\n      destinoPath,\n      marca\n    }\n  }];\n} catch (e) {\n  throw new Error('FALLO LECTURA: ' + e.message + ' | ' + productoPath);\n}"
+      }
+    },
+    {
+      "name": "Switch Marca",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.marca }}",
+        "rules": {
+          "rules": [
+            {
+              "operation": "equal",
+              "value2": "yourbrand"
+            },
+            {
+              "operation": "equal",
+              "value2": "yourdulceria"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Set HTML YourBrand",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst html = `<!DOCTYPE html><html><body style=\"width:1080px;height:1080px;background:linear-gradient(170deg,#6d1e68 0%,#4a1547 100%);margin:0;display:flex;flex-direction:column;\"><div style=\"position:absolute;top:40px;left:40px;\"><img src=\"data:${item.logoMime};base64,${item.logoBase64}\" style=\"height:140px;width:140px;border-radius:50%;border:4px solid rgba(255,255,255,0.2);\"></div><div style=\"flex:1;display:flex;justify-content:center;align-items:center;padding:40px;\"><img src=\"data:${item.productoMime};base64,${item.productoBase64}\" style=\"max-height:750px;object-fit:contain;\"></div><div style=\"background:#fff;padding:30px;border-top:8px solid #ffb703;text-align:center;\"><h1 style=\"font-size:42px;margin:0;\">${item.productId}</h1><div style=\"font-size:54px;color:#6d1e68;margin:10px 0;\">${item.cupFormatted || item.cupPrice + ' CUP'}</div><div style=\"background:#ffb703;padding:12px;border-radius:50px;font-weight:bold;\">${item.copyText || '🚨 Visítanos ya 🚨'}</div></div></body></html>`;\nreturn { html };"
+      }
+    },
+    {
+      "name": "Set HTML YourDulceria",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst html = `<html><body style=\"width:1200px;height:1200px;background:#600000;margin:0;display:flex;flex-direction:column;\"><div style=\"flex:1;display:flex;justify-content:center;align-items:center;\"><img src=\"data:${item.productoMime};base64,${item.productoBase64}\" style=\"max-height:900px;object-fit:contain;\"></div><div style=\"background:#C5A059;padding:40px;text-align:center;\"><h1 style=\"font-size:58px;color:#3d0000;\">${item.productId}</h1><div style=\"background:#3d0000;color:#C5A059;padding:15px;border-radius:100px;font-size:72px;\">${item.cupFormatted || item.cupPrice + ' CUP'}</div></div></body></html>`;\nreturn { html };"
+      }
+    },
+    {
+      "name": "Render HTML to Image",
+      "type": "n8n-nodes-html2image.html2image",
+      "typeVersion": 1,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "html": "={{ $json.html }}"
+      }
+    },
+    {
+      "name": "Save Result",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.destinoPath }}",
+        "dataPropertyName": "data"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Files & Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Files & Base64": {
+      "main": [
+        [
+          {
+            "node": "Switch Marca",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Marca": {
+      "main": [
+        [
+          {
+            "node": "Set HTML YourBrand",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set HTML YourDulceria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set HTML YourBrand": {
+      "main": [
+        [
+          {
+            "node": "Render HTML to Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set HTML YourDulceria": {
+      "main": [
+        [
+          {
+            "node": "Render HTML to Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render HTML to Image": {
+      "main": [
+        [
+          {
+            "node": "Save Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionCounter": 140,
+  "tags": []
+}

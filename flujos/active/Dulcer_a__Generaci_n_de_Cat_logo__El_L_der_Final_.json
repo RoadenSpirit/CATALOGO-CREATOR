@@ -1,0 +1,155 @@
+{
+  "name": "YourDulceria: Generación de Catálogo (El Líder Final)",
+  "description": null,
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "position": [
+        0,
+        0
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "command": "find \"/data/yourdulceria/catalogo yourdulceria\" -mindepth 2 -type f -not -path \"*/.*\""
+      },
+      "name": "Listar Fotos YourDulceria",
+      "position": [
+        250,
+        0
+      ],
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst result = $input.first().json.stdout;\nif (!result) return [];\n\nconst lines = result.split('\\n').filter(l => l.trim() !== '').sort();\nconst EXT = /\\.(jpg|jpeg|png|webp|gif)$/i;\n\nconst priceMap = {\n  'CAKE': 2500,\n  'CAKE 2 PISOS': 5500,\n  'CAKE BANDEJA': 3500,\n  'CAKE SENCILLO': 1800,\n  'CAKE.CHOCOLATE': 2800,\n  'CAPUCHINO': 150,\n  'MAICENA': 200,\n  'MINICAKE': 650\n};\n\nconst categoryCounters = {};\nconst out = [];\n\nfunction getBaseName(folder) {\n  const f = folder.toUpperCase();\n  if (f === 'CAKE' || f === 'CAKE SENCILLO') return 'Cake Simple';\n  if (f.includes('CAKE')) {\n    let rest = folder.replace(/cake/gi, '').trim();\n    if (rest.startsWith('.') || rest.startsWith('-')) rest = rest.substring(1).trim();\n    rest = rest.charAt(0).toUpperCase() + rest.slice(1);\n    return `Cake de ${rest}`;\n  }\n  return folder;\n}\n\nfor (const fullPath of lines) {\n  if (!EXT.test(fullPath)) continue;\n  \n  const parts = fullPath.split('/');\n  const fileName = parts.pop();\n  const categoryFolder = parts.pop();\n  const categoryKey = categoryFolder.toUpperCase();\n  \n  if (!categoryCounters[categoryKey]) categoryCounters[categoryKey] = 1;\n  else categoryCounters[categoryKey]++;\n  \n  const baseName = getBaseName(categoryFolder);\n  const displayName = `${baseName} Decoración #${categoryCounters[categoryKey]}`;\n  \n  const targetPath = `/data/yourdulceria/productosProcesados/${categoryFolder}/${displayName}.png`;\n  if (fs.existsSync(targetPath)) {\n    continue;\n  }\n  \n  const priceCup = priceMap[categoryKey] || 500;\n  \n  out.push({\n    json: {\n      path: fullPath,\n      fileName,\n      category: categoryFolder,\n      baseName,\n      displayName,\n      cupFormatted: priceCup.toLocaleString() + ' CUP'\n    }\n  });\n}\nreturn out;"
+      },
+      "name": "Lógica de Nombres y Precios",
+      "position": [
+        500,
+        0
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        750,
+        0
+      ]
+    },
+    {
+      "name": "Prepare Payload YourDulceria",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nreturn [{\n  json: {\n    ...item,\n    marca: 'yourdulceria',\n    logoPath: '/data/yourdulceria/logoYourDulceria.jpeg',\n    productoPath: item.path,\n    destinoPath: '/data/yourdulceria/productosProcesados/' + item.category + '/' + item.displayName + '.png'\n  }\n}];"
+      }
+    },
+    {
+      "name": "Ejecutar Motor Render",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        0
+      ],
+      "parameters": {
+        "workflowId": "DkYpRRgW6JYIbGiD",
+        "mode": "each"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Listar Fotos YourDulceria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Fotos YourDulceria": {
+      "main": [
+        [
+          {
+            "node": "Lógica de Nombres y Precios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lógica de Nombres y Precios": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Prepare Payload YourDulceria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Payload YourDulceria": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar Motor Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar Motor Render": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionCounter": 12,
+  "tags": []
+}

@@ -1,0 +1,303 @@
+{
+  "name": "YourBrand Batch: (EVOLUCIONADO V1 - FULL SUBFLOW)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ManualTrigger",
+      "name": "ManualTrigger",
+      "position": [
+        0,
+        144
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/logo2.jpeg",
+        "options": {
+          "dataPropertyName": "dataLogo"
+        }
+      },
+      "id": "CargarLogo",
+      "name": "CargarLogo",
+      "position": [
+        208,
+        144
+      ],
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "command": "find /data/your-photos-folder -mindepth 2 -type f -not -path \"*/.*\""
+      },
+      "id": "SO_FindFiles",
+      "name": "SO_FindFiles",
+      "position": [
+        400,
+        -48
+      ],
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json.stdout;\nif (!result) return [];\nconst lines = result.split('\\n').filter(l => l.trim() !== '');\nconst EXT = /\\.(jpg|jpeg|png|webp|gif)$/i;\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str).normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").toUpperCase().replace(/[^A-Z0-9]/g, '');\n}\n\nconst out = [];\nfor (const fullPath of lines) {\n  if (!EXT.test(fullPath)) continue;\n  \n  const parts = fullPath.split('/');\n  const fileName = parts.pop();\n  const categoryRaw = parts.pop();\n  \n  if (!categoryRaw) continue;\n  \n  const category = normalizeName(categoryRaw);\n  const baseName = fileName.replace(/\\.[^.]+$/i, '');\n  const matchKey = normalizeName(baseName);\n  const compositeKey = matchKey + '|' + category;\n  \n  out.push({ \n    json: { \n      path: fullPath, \n      fileName, \n      categoryRaw, \n      category, \n      matchKey, \n      compositeKey \n    } \n  });\n}\n\nreturn out;"
+      },
+      "id": "SO_ParsePaths",
+      "name": "SO_ParsePaths",
+      "position": [
+        656,
+        -48
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776"
+        },
+        "sheetName": {
+          "__regex": "https:\\/\\/docs\\.google\\.com\\/spreadsheets\\/d\\/[0-9a-zA-Z\\-_]+.*\\#gid=([0-9]+)",
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776"
+        },
+        "options": {}
+      },
+      "id": "GoogleSheets",
+      "name": "GoogleSheets",
+      "position": [
+        400,
+        304
+      ],
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wdFEKETdaDV8ZhiB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst cleaned = [];\n\nconst COL = { \n  codigo: 'CÓDIGO', \n  nombre: 'NOMBRE', \n  precioUsd: 'PRECIO USD', \n  precioCup: 'PRECIO CUP', \n  estado: 'ESTADO' \n};\n\nfunction safeNum(val) {\n  if (val === null || val === undefined) return null;\n  if (typeof val === 'number' && !Number.isNaN(val)) return val;\n  const s = String(val).replace(/[^0-9.,]/g, '').replace(',', '.');\n  const n = parseFloat(s);\n  return Number.isNaN(n) ? null : n;\n}\n\nfunction safeStr(val) {\n  if (val === null || val === undefined) return '';\n  return String(val).trim();\n}\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str).normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").toUpperCase().replace(/[^A-Z0-9]/g, '');\n}\n\nfunction isSectionHeader(codigo, nombre) {\n  const c = String(codigo).trim();\n  const n = safeStr(nombre);\n  return c.includes('---') || (!n && !c);\n}\n\nfunction sectionToCategory(codigo) {\n  const m = String(codigo).match(/---\\s*([^---]+)\\s*---/);\n  return m ? normalizeName(m[1]) : null;\n}\n\nlet currentCategory = '';\n\nfor (const item of items) {\n  const row = item.json || item;\n  \n  const codigoRaw = row[COL.codigo];\n  const nombre = safeStr(row[COL.nombre]);\n  const usd = safeNum(row[COL.precioUsd]);\n  const cup = safeNum(row[COL.precioCup]);\n  \n  if (isSectionHeader(codigoRaw, nombre)) {\n    const cat = sectionToCategory(codigoRaw);\n    if (cat) currentCategory = cat;\n    continue;\n  }\n  \n  if (!nombre) continue;\n  \n  const matchKey = normalizeName(nombre);\n  if (!matchKey) continue;\n  \n  const category = currentCategory || 'GENERAL';\n  const compositeKey = matchKey + '|' + category;\n  \n  cleaned.push({\n    json: {\n      matchKey,\n      category,\n      compositeKey,\n      codigo: codigoRaw,\n      productId: nombre,\n      usdPrice: usd,\n      cupPrice: cup,\n      usdFormatted: usd != null ? `$${Number(usd).toFixed(2)} USD` : '',\n      cupFormatted: cup != null ? `${Number(cup).toLocaleString('en-US')} CUP` : ''\n    }\n  });\n}\n\nreturn cleaned;"
+      },
+      "id": "CleanPricing",
+      "name": "CleanPricing",
+      "position": [
+        656,
+        304
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "matchKey",
+        "options": {}
+      },
+      "id": "MergeData",
+      "name": "MergeData",
+      "position": [
+        960,
+        144
+      ],
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "LoopNode",
+      "name": "LoopNode",
+      "position": [
+        1200,
+        144
+      ],
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "workflowId": "OVcWRaCGB0aGve9L",
+        "mode": "parameter",
+        "options": {
+          "waitForSubworkflow": true
+        },
+        "parameters": {
+          "parameter": [
+            {
+              "name": "marca",
+              "value": "yourbrand"
+            },
+            {
+              "name": "logoPath",
+              "value": "/data/logo2.jpeg"
+            },
+            {
+              "name": "productoPath",
+              "value": "={{ $('LoopNode').item.json.path }}"
+            },
+            {
+              "name": "destinoPath",
+              "value": "=/data/fotosProcesadas/{{ $('LoopNode').item.json.categoryRaw || 'Resultados' }}/{{ $('LoopNode').item.json.fileName }}"
+            },
+            {
+              "name": "productId",
+              "value": "={{ $('LoopNode').item.json.productId }}"
+            },
+            {
+              "name": "usdPrice",
+              "value": "={{ $('LoopNode').item.json.usdFormatted }}"
+            },
+            {
+              "name": "cupPrice",
+              "value": "={{ $('LoopNode').item.json.cupFormatted }}"
+            }
+          ]
+        }
+      },
+      "id": "ExecuteRenderMotor",
+      "name": "ExecuteRenderMotor",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1456,
+        64
+      ],
+      "executeOnce": false
+    }
+  ],
+  "connections": {
+    "CargarLogo": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "GoogleSheets",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "SO_FindFiles",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "CleanPricing": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "MergeData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "GoogleSheets": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "CleanPricing",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "LoopNode": {
+      "main": [
+        [],
+        [
+          {
+            "index": 0,
+            "node": "ExecuteRenderMotor",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "ManualTrigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "CargarLogo",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "MergeData": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "LoopNode",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SO_FindFiles": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "SO_ParsePaths",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SO_ParsePaths": {
+      "main": [
+        [
+          {
+            "index": 1,
+            "node": "MergeData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "ExecuteRenderMotor": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "LoopNode",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "activeVersion": null,
+  "tags": []
+}

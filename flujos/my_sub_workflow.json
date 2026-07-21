@@ -1,0 +1,70 @@
+{
+  "updatedAt": "2026-02-23T18:03:23.627Z",
+  "createdAt": "2026-02-23T18:03:23.627Z",
+  "id": "gIC5OOd2YfXg5H5I",
+  "name": "My Sub-workflow",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "execute-find-command",
+      "name": "Leer Carpetas de Fotos (Comando Nivel SO)",
+      "parameters": {
+        "command": "find /data/your-photos-folder -mindepth 2 -type f -not -path \"*/.*\""
+      },
+      "position": [
+        224,
+        0
+      ],
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1
+    },
+    {
+      "id": "49f11624-d82e-4842-a649-79980ba268ff",
+      "typeVersion": 1.1,
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        16,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Leer Carpetas de Fotos (Comando Nivel SO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "70915f84-7a9b-4786-90ed-9b505d75a05d",
+  "activeVersionId": null,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-02-23T18:03:23.627Z",
+      "createdAt": "2026-02-23T18:03:23.627Z",
+      "role": "workflow:owner",
+      "workflowId": "gIC5OOd2YfXg5H5I",
+      "projectId": "wrAcVFBjHe5KMnRw"
+    }
+  ],
+  "activeVersion": null,
+  "tags": []
+}

@@ -1,0 +1,578 @@
+{
+  "name": "YourBrand Batch: Imágenes + Precios",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-manual",
+      "name": "Manual Trigger",
+      "position": [
+        0,
+        144
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "command": "find /data/your-photos-folder -mindepth 2 -type f -not -path \"*/.*\""
+      },
+      "id": "execute-find-command",
+      "name": "Leer Carpetas de Fotos (Comando Nivel SO)",
+      "position": [
+        672,
+        0
+      ],
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transforma el texto de rutas entregado por OS nativo en el diccionario y compositeKey\nconst result = $input.first().json.stdout;\nif (!result) return [];\n\nconst lines = result.split('\\n').filter(l => l.trim() !== '');\nconst EXT = /\\.(jpg|jpeg|png|webp|gif)$/i;\n\n// Nomalización FUERTE: Quita acentos, todo a MAYÚSCULAS y elimina todo lo que no sea A-Z o números\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str)\n    .normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\") // Quitar acentos/diacríticos\n    .toUpperCase() // Convertir a mayúsculas\n    .replace(/[^A-Z0-9]/g, ''); // Eliminar espacios, guiones, símbolos de $, etc.\n}\n\nconst out = [];\n\nfor (const fullPath of lines) {\n  if (!EXT.test(fullPath)) continue;\n  \n  const parts = fullPath.split('/');\n  const fileName = parts.pop();\n  const categoryRaw = parts.pop();\n  \n  if (!categoryRaw) continue;\n  \n  const category = normalizeName(categoryRaw);\n  const baseName = fileName.replace(/\\.[^.]+$/i, ''); // remover extensión\n  const matchKey = normalizeName(baseName);\n  \n  // Nuestra llave maestra inquebrantable\n  const compositeKey = matchKey + '|' + category;\n  \n  out.push({ json: { path: fullPath, fileName, categoryRaw, category, matchKey, compositeKey } });\n}\n\nreturn out;"
+      },
+      "id": "code-parse-paths",
+      "name": "Convertir Lista a Items",
+      "position": [
+        880,
+        0
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776",
+          "__regex": "https:\\/\\/docs\\.google\\.com\\/spreadsheets\\/d\\/[0-9a-zA-Z\\-_]+.*\\#gid=([0-9]+)"
+        },
+        "options": {}
+      },
+      "id": "google-sheets",
+      "name": "Google Sheets",
+      "position": [
+        224,
+        272
+      ],
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wdFEKETdaDV8ZhiB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Limpieza + categoría desde secciones (--- ACCESORIOS ---) y compositeKey para emparejar\nconst items = $input.all();\nconst cleaned = [];\nconst COL = { \n  codigo: 'CÓDIGO', \n  nombre: 'NOMBRE', \n  precioUsd: 'PRECIO USD', \n  precioCup: 'PRECIO CUP',\n  precioAntiguoUsd: 'PRECIO ANTIGUO USD',\n  precioAntiguoCup: 'PRECIO ANTIGUO CUP',\n  estado: 'ESTADO' \n};\n\nfunction safeNum(val) {\n  if (val === null || val === undefined || val === '') return null;\n  if (typeof val === 'number' && !Number.isNaN(val)) return val;\n  const s = String(val).replace(/[^0-9.,]/g, '').replace(',', '.');\n  const n = parseFloat(s);\n  return Number.isNaN(n) ? null : n;\n}\n\nfunction safeStr(val) {\n  if (val === null || val === undefined) return '';\n  return String(val).trim();\n}\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str)\n    .normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\")\n    .toUpperCase()\n    .replace(/[^A-Z0-9]/g, '');\n}\n\nfunction isSectionHeader(codigo, nombre) {\n  const c = String(codigo || '').trim();\n  const n = safeStr(nombre);\n  return c.includes('---') || (!n && !c);\n}\n\nfunction sectionToCategory(codigo) {\n  const m = String(codigo).match(/---\\s*([^---]+)\\s*---/);\n  return m ? normalizeName(m[1]) : null;\n}\n\nlet currentCategory = '';\n\nfor (const item of items) {\n  const row = item.json || item;\n  const codigoRaw = row[COL.codigo];\n  const nombre = safeStr(row[COL.nombre]);\n  \n  if (isSectionHeader(codigoRaw, nombre)) {\n    const cat = sectionToCategory(codigoRaw);\n    if (cat) currentCategory = cat;\n    continue;\n  }\n  \n  if (!nombre) continue;\n\n  const usd = safeNum(row[COL.precioUsd]);\n  const cup = safeNum(row[COL.precioCup]);\n  const oldUsd = safeNum(row[COL.precioAntiguoUsd]);\n  const oldCup = safeNum(row[COL.precioAntiguoCup]);\n\n  const matchKey = normalizeName(nombre);\n  const compositeKey = matchKey + '|' + currentCategory;\n\n  // Determinar si hay rebaja real (actual < antiguo)\n  const isSale = (oldUsd !== null && usd < oldUsd);\n  \n  // Formateo de precios\n  const usdFormatted = usd !== null ? `$${usd.toFixed(2)}` : 'N/A';\n  const cupFormatted = cup !== null ? `${cup.toLocaleString()} CUP` : 'N/A';\n  const oldUsdFormatted = oldUsd !== null ? `$${oldUsd.toFixed(2)}` : '';\n  const oldCupFormatted = oldCup !== null ? `${oldCup.toLocaleString()} CUP` : '';\n  \n  // Cálculo de ahorro\n  let savingsLabel = '';\n  if (isSale) {\n    const diff = oldUsd - usd;\n    savingsLabel = `AHORRAS $${diff.toFixed(2)}`;\n  }\n\n  cleaned.push({ \n    json: { \n      productId: nombre,\n      usd, \n      cup, \n      oldUsd,\n      oldCup,\n      usdFormatted, \n      cupFormatted,\n      oldUsdFormatted,\n      oldCupFormatted,\n      isSale,\n      savingsLabel,\n      category: currentCategory,\n      matchKey,\n      compositeKey\n    } \n  });\n}\n\nreturn cleaned;"
+      },
+      "id": "code-clean-pricing",
+      "name": "Limpiar precios (Code)",
+      "position": [
+        448,
+        272
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "matchKey",
+        "options": {}
+      },
+      "id": "merge-data",
+      "name": "Unir producto + imagen (por categoría)",
+      "position": [
+        1104,
+        144
+      ],
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $('Loop').item.json.path }}",
+        "options": {
+          "fileName": "={{ $('Loop').item.json.fileName }}",
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "read-image-on-demand",
+      "name": "Cargar imagen (solo emparejados)",
+      "position": [
+        1504,
+        144
+      ],
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop",
+      "name": "Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1312,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/logo.jpg",
+        "options": {
+          "dataPropertyName": "logo"
+        }
+      },
+      "id": "cargar-logo",
+      "name": "Cargar Logo",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "dataPropertyName": "logo",
+        "width": 160,
+        "height": 160,
+        "options": {}
+      },
+      "id": "resize-logo",
+      "name": "Redimensionar Logo",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "width": 840,
+        "height": 840,
+        "options": {}
+      },
+      "id": "resize-product",
+      "name": "Redimensionar Producto",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        1904,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "information"
+      },
+      "id": "get-info",
+      "name": "Obtener Info Imagen",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        2112,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "dataPropertyName": "bg",
+        "backgroundColor": "#6d1e68",
+        "width": 1200,
+        "height": 1200,
+        "options": {}
+      },
+      "id": "create-bg",
+      "name": "Crear Fondo YourBrand",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        2304,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "draw",
+        "dataPropertyName": "bg",
+        "color": "#ffffff",
+        "startPositionX": 0,
+        "startPositionY": 1000,
+        "endPositionX": 1200,
+        "endPositionY": 1200,
+        "options": {}
+      },
+      "id": "draw-white-box",
+      "name": "Dibujar Caja Blanca",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        2512,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "composite",
+        "dataPropertyName": "bg",
+        "dataPropertyNameComposite": "logo",
+        "positionX": 40,
+        "positionY": 40,
+        "options": {}
+      },
+      "id": "montar-logo",
+      "name": "Montar Logo",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        2704,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "composite",
+        "dataPropertyName": "bg",
+        "dataPropertyNameComposite": "data",
+        "positionX": "={{ Math.round((1200 - ($json.width || 840)) / 2) }}",
+        "positionY": "={{ Math.round((1000 - ($json.height || 840)) / 2) - 20 }}",
+        "options": {}
+      },
+      "id": "montar-product",
+      "name": "Montar Producto",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        2912,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "dataPropertyName": "bg",
+        "text": "={{ $('Loop').item.json.productId }}",
+        "fontSize": 42,
+        "positionX": 60,
+        "positionY": 1045,
+        "lineLength": 40,
+        "options": {}
+      },
+      "id": "text-nombre",
+      "name": "Escribir Nombre",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        3104,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "dataPropertyName": "bg",
+        "text": "={{ $('Loop').item.json.cupFormatted }} / {{ $('Loop').item.json.usdFormatted }}",
+        "fontSize": 50,
+        "fontColor": "#ff8c00",
+        "positionX": 60,
+        "positionY": 1115,
+        "options": {}
+      },
+      "id": "text-precios",
+      "name": "Escribir Precios",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        3312,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/fotosProcesadas/{{ $('Loop').item.json.categoryRaw || 'Resultados' }}/{{ $('Loop').item.json.fileName }}",
+        "options": {}
+      },
+      "id": "guardar",
+      "name": "Guardar en fotos_procesadas",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        3568,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tomar el binario del logo redimensionado del flujo paralelo\n// y añadirlo al ítem actual bajo el nombre 'logo'\nconst items = $input.all();\nconst logoNodeData = $('Redimensionar Logo').first();\n\nif (logoNodeData && logoNodeData.binary && logoNodeData.binary.logo) {\n  for (let item of items) {\n    item.binary = item.binary || {};\n    item.binary.logo = logoNodeData.binary.logo;\n  }\n}\n\nreturn items;"
+      },
+      "id": "adjuntar-logo",
+      "name": "Adjuntar Logo (RAM)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1712,
+        144
+      ]
+    }
+  ],
+  "connections": {
+    "Convertir Lista a Items": {
+      "main": [
+        [
+          {
+            "index": 1,
+            "node": "Unir producto + imagen (por categoría)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Google Sheets": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Limpiar precios (Code)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Leer Carpetas de Fotos (Comando Nivel SO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Convertir Lista a Items",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Limpiar precios (Code)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Unir producto + imagen (por categoría)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Google Sheets",
+            "type": "main"
+          },
+          {
+            "node": "Cargar Logo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Cargar imagen (solo emparejados)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redimensionar Producto": {
+      "main": [
+        [
+          {
+            "node": "Obtener Info Imagen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Info Imagen": {
+      "main": [
+        [
+          {
+            "node": "Crear Fondo YourBrand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Fondo YourBrand": {
+      "main": [
+        [
+          {
+            "node": "Dibujar Caja Blanca",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dibujar Caja Blanca": {
+      "main": [
+        [
+          {
+            "node": "Montar Logo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Logo": {
+      "main": [
+        [
+          {
+            "node": "Montar Producto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Producto": {
+      "main": [
+        [
+          {
+            "node": "Escribir Nombre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escribir Nombre": {
+      "main": [
+        [
+          {
+            "node": "Escribir Precios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escribir Precios": {
+      "main": [
+        [
+          {
+            "node": "Guardar en fotos_procesadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en fotos_procesadas": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Logo": {
+      "main": [
+        [
+          {
+            "node": "Redimensionar Logo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unir producto + imagen (por categoría)": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar imagen (solo emparejados)": {
+      "main": [
+        [
+          {
+            "node": "Adjuntar Logo (RAM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adjuntar Logo (RAM)": {
+      "main": [
+        [
+          {
+            "node": "Redimensionar Producto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redimensionar Logo": {
+      "main": [
+        [
+          {
+            "node": "Leer Carpetas de Fotos (Comando Nivel SO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "91576a44-1aa0-4a8d-be7a-d1a263157424"
+}

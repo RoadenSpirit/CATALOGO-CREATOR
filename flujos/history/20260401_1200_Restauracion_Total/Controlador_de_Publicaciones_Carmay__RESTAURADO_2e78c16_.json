@@ -1,0 +1,286 @@
+{
+  "name": "Controlador de Publicaciones YourBrand (RESTAURADO 2e78c16)",
+  "nodes": [
+    {
+      "position": [
+        800,
+        80
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "name": "Trigger_Schedule",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "options": {},
+        "filtersUI": {
+          "values": [
+            {
+              "lookupValue": "PUBLICADO",
+              "lookupColumn": "ESTADO PUBLICACIÓN"
+            }
+          ]
+        },
+        "sheetName": {
+          "value": "Inventario",
+          "__rl": true,
+          "mode": "list"
+        },
+        "documentId": {
+          "value": "1o2JNhZbJtPXcg41YcG5_BKkhEB0nfse5JVZ62k_5Y6Q",
+          "__rl": true,
+          "mode": "id"
+        }
+      },
+      "name": "Read_Sheets",
+      "position": [
+        1008,
+        80
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "typeVersion": 4,
+      "type": "n8n-nodes-base.googleSheets"
+    },
+    {
+      "typeVersion": 2,
+      "type": "n8n-nodes-base.code",
+      "name": "Process_Images",
+      "parameters": {
+        "jsCode": "const fs = require('fs');\\nconst cachePath = '/data/cache_pendientes.json';\\nconst productos = [];\\n\\nfor (const item of $input.all()) {\\n    const data = item.json;\\n    \\n    const rawCat = data['CATEGORÍA'] || '';\\n    const cat = rawCat ? rawCat.charAt(0).toUpperCase() + rawCat.slice(1).toLowerCase() : 'SinCategoria';\\n    const name = data['NOMBRE'] || '';\\n    \\n    const basePath = `/data/your-photos-folder/${cat}/${name}`;\\n    const extensions = ['.jpg', '.png', '.jpeg', '.JPG', '.PNG'];\\n    \\n    let imageBase64 = null;\\n    let finalPath = null;\\n    \\n    for (const ext of extensions) {\\n        if (fs.existsSync(basePath + ext)) {\\n            finalPath = basePath + ext;\\n            break;\\n        }\\n    }\\n    \\n    try {\\n        if (finalPath) {\\n            const ext = finalPath.split('.').pop().toLowerCase();\\n            const mime = (ext === 'png') ? 'image/png' : 'image/jpeg';\\n            const buffer = fs.readFileSync(finalPath);\\n            imageBase64 = `data:${mime};base64,${buffer.toString('base64')}`;\\n        }\\n    } catch (err) {\\n        console.error('Error leyendo imagen:', err.message);\\n    }\\n\\n    const usd = data['PRECIO USD NUEVO'] ? `$${data['PRECIO USD NUEVO']} USD` : '';\\n    const cup = data['PRECIO CUP NUEVO'] ? `${data['PRECIO CUP NUEVO']} CUP` : '';\\n    const precioFinal = [cup, usd].filter(Boolean).join(' | ');\\n\\n    productos.push({\\n        id_unico: data['CÓDIGO'],\\n        nombre: name,\\n        precio: precioFinal,\\n        estado: data['ESTADO PUBLICACIÓN'] || 'NO PUBLICADO',\\n        imagen: imageBase64\\n    });\\n}\\n\\nfs.writeFileSync(cachePath, JSON.stringify(productos));\\n\\nreturn [{ json: { status: 'success', total_cacheados: productos.length } }];"
+      },
+      "position": [
+        1200,
+        80
+      ]
+    },
+    {
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        800,
+        288
+      ],
+      "typeVersion": 1,
+      "parameters": {
+        "path": "panel-yourbrand",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "c5977e3b-7ac1-4562-85bb-c383e2fb89b3",
+      "name": "Webhook_UI"
+    },
+    {
+      "name": "Render_HTML",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1008,
+        288
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const fs = require('fs');\\nlet productos = [];\\n\\ntry {\\n    const rawData = fs.readFileSync('/data/cache_pendientes.json', 'utf8');\\n    productos = JSON.parse(rawData);\\n} catch (e) {\\n    productos = [];\\n}\\n\\n// Escapamos los datos para inyectarlos de forma 100% segura en JS\\nconst safeProductosJson = JSON.stringify(productos).replace(/</g, '\\\\\\\\u003c');\\n\\nlet cardsHtml = '';\\nfor (const prod of productos) {\\n    const imgSrc = prod.imagen ? prod.imagen : 'https://via.placeholder.com/400x400?text=Sin+Imagen';\\n    const colorBorde = prod.estado === 'PENDIENTE ACTUALIZAR' ? '#e74c3c' : '#6d1e68';\\n    \\n    // El botón AHORA SOLO RECIBE EL ID. Cero errores de sintaxis.\\n    cardsHtml += `\\n    <div class=\\\"card\\\" id=\\\"card-${prod.id_unico}\\\" style=\\\"border-left: 6px solid ${colorBorde};\\\">\\n        <img src=\\\"${imgSrc}\\\" loading=\\\"lazy\\\" alt=\\\"Producto\\\" />\\n        <div class=\\\"card-content\\\">\\n            <h3>${prod.nombre}</h3>\\n            <p class=\\\"price\\\">${prod.precio}</p>\\n            <p class=\\\"badge\\\">${prod.estado}</p>\\n            <button onclick=\\\"prepararPublicacion('${prod.id_unico}')\\\">\\n                Preparar y Publicar\\n            </button>\\n        </div>\\n    </div>`;\\n}\\n\\nconst html = `\\n<!DOCTYPE html>\\n<html lang=\\\"es\\\">\\n<head>\\n    <meta charset=\\\"UTF-8\\\">\\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\">\\n    <title>Panel YourBrand</title>\\n    <style>\\n        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f4f9; padding: 20px; }\\n        .header { text-align: center; color: #6d1e68; margin-bottom: 30px; }\\n        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }\\n        .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }\\n        .card img { width: 100%; height: 250px; object-fit: cover; background: #eee; }\\n        .card-content { padding: 20px; }\\n        .card h3 { margin: 0 0 10px; font-size: 18px; color: #333; }\\n        .price { font-size: 22px; font-weight: bold; color: #ffb703; margin: 0 0 10px; }\\n    </style>\\n</head>\\n<body>\\n    <div class=\\\"header\\\">\\n        <h1>YourBrand - Panel de Publicaciones</h1>\\n    </div>\\n    <div class=\\\"grid\\\">\\n        ${cardsHtml}\\n    </div>\\n</body>\\n</html>\\n`;\\nreturn { html };"
+      }
+    },
+    {
+      "typeVersion": 1,
+      "position": [
+        1200,
+        288
+      ],
+      "name": "Respond_Web",
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "value": "text/html; charset=utf-8",
+                "name": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook"
+    },
+    {
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        800,
+        480
+      ],
+      "typeVersion": 1,
+      "name": "Webhook_Mutate",
+      "webhookId": "55974b00-9ff8-46ed-90e1-76973789c659",
+      "parameters": {
+        "responseMode": "responseNode",
+        "path": "api-publicar",
+        "httpMethod": "POST"
+      }
+    },
+    {
+      "position": [
+        1008,
+        480
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.id_unico }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Validate_Payload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1
+    },
+    {
+      "type": "n8n-nodes-base.googleSheets",
+      "name": "Update_Sheets",
+      "parameters": {
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "'FECHA ÚLTIMA EDICIÓN'": "={{ $now }}",
+            "'ESTADO PUBLICACIÓN'": "PUBLICADO"
+          }
+        },
+        "sheetName": {
+          "mode": "list",
+          "value": "Inventario",
+          "__rl": true
+        },
+        "documentId": {
+          "mode": "id",
+          "__rl": true,
+          "value": "1o2JNhZbJtPXcg41YcG5_BKkhEB0nfse5JVZ62k_5Y6Q"
+        },
+        "operation": "update"
+      },
+      "typeVersion": 4,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "position": [
+        1200,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "responseBody": "{\\n  \"status\": \"success\"\\n}",
+        "respondWith": "json"
+      },
+      "name": "Confirm_UI",
+      "position": [
+        1408,
+        464
+      ],
+      "typeVersion": 1,
+      "type": "n8n-nodes-base.respondToWebhook"
+    }
+  ],
+  "connections": {
+    "Read_Sheets": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "Process_Images"
+          }
+        ]
+      ]
+    },
+    "Update_Sheets": {
+      "main": [
+        [
+          {
+            "node": "Confirm_UI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook_Mutate": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Validate_Payload",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Trigger_Schedule": {
+      "main": [
+        [
+          {
+            "node": "Read_Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook_UI": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "node": "Render_HTML",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render_HTML": {
+      "main": [
+        [
+          {
+            "node": "Respond_Web",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Validate_Payload": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Update_Sheets",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

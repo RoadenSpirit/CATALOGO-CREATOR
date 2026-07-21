@@ -1,0 +1,311 @@
+{
+  "name": "YourBrand Batch: Imágenes + Precios (OPTIMIZADO V1) - RESTAURADO 2e78c16",
+  "description": null,
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "ManualTrigger",
+      "typeVersion": 1,
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [
+        0,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/logo2.jpeg",
+        "options": {
+          "dataPropertyName": "dataLogo"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "position": [
+        208,
+        144
+      ],
+      "name": "CargarLogo",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "command": "find /data/your-photos-folder -mindepth 2 -type f -not -path \"*/.*\""
+      },
+      "name": "SO_FindFiles",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [
+        400,
+        -48
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json.stdout;\nif (!result) return [];\nconst lines = result.split('\\n').filter(l => l.trim() !== '');\nconst EXT = /\\.(jpg|jpeg|png|webp|gif)$/i;\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str).normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").toUpperCase().replace(/[^A-Z0-9]/g, '');\n}\n\nconst out = [];\nfor (const fullPath of lines) {\n  if (!EXT.test(fullPath)) continue;\n  \n  const parts = fullPath.split('/');\n  const fileName = parts.pop();\n  const categoryRaw = parts.pop();\n  \n  if (!categoryRaw) continue;\n  \n  const category = normalizeName(categoryRaw);\n  const baseName = fileName.replace(/\\.[^.]+$/i, '');\n  const matchKey = normalizeName(baseName);\n  const compositeKey = matchKey + '|' + category;\n  \n  out.push({ \n    json: { \n      path: fullPath, \n      fileName, \n      categoryRaw, \n      category, \n      matchKey, \n      compositeKey \n    } \n  });\n}\n\nreturn out;"
+      },
+      "position": [
+        656,
+        -48
+      ],
+      "name": "SO_ParsePaths",
+      "typeVersion": 2,
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776",
+          "__rl": true
+        },
+        "sheetName": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776",
+          "__rl": true,
+          "__regex": "https:\\/\\/docs\\.google\\.com\\/spreadsheets\\/d\\/[0-9a-zA-Z\\-_]+.*\\#gid=([0-9]+)",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "typeVersion": 4.5,
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        400,
+        304
+      ],
+      "name": "GoogleSheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst cleaned = [];\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n}\n\nconst formatUsd = (val) => '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD';\nconst formatCup = (val) => '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' CUP';\n\nfor (const item of items) {\n  const row = item.json;\n  const nombre = row['PRODUCTO'] ? String(row['PRODUCTO']).trim() : '';\n  if (!nombre) continue;\n\n  const actualUsd = parseFloat(row['ACTUAL USD']) || 0;\n  const actualCup = parseFloat(row['ACTUAL CUP']) || 0;\n  const maxUsd = parseFloat(row['MAX HIST USD']) || 0;\n  const maxCup = parseFloat(row['MAX HIST CUP']) || 0;\n\n  // Lógica de Descuento: Evaluamos ambas monedas\n  const hasDiscount = (maxUsd > actualUsd) && (maxCup > actualCup);\n\n  let discountData = {};\n  if (hasDiscount) {\n      const diffUsd = maxUsd - actualUsd;\n      const diffCup = maxCup - actualCup;\n      discountData = {\n          maxUsdFormatted: formatUsd(maxUsd),\n          maxCupFormatted: formatCup(maxCup),\n          diffUsdFormatted: formatUsd(diffUsd),\n          diffCupFormatted: formatCup(diffCup)\n      };\n  }\n\n  // Soporte para nueva estructura de categorías\n  const categoryRaw = row['CATEGORIA_AUTO'] || row['CATEGORIA'] || 'General';\n\n  cleaned.push({\n    json: {\n      matchKey: normalizeName(nombre),\n      productId: nombre,\n      usdPrice: actualUsd,\n      cupPrice: actualCup,\n      usdFormatted: formatUsd(actualUsd),\n      cupFormatted: formatCup(actualCup),\n      hasDiscount: hasDiscount,\n      ...discountData,\n      categoryRaw: categoryRaw\n    }\n  });\n}\nreturn cleaned;"
+      },
+      "type": "n8n-nodes-base.code",
+      "name": "CleanPricing",
+      "typeVersion": 2,
+      "position": [
+        656,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "matchKey",
+        "options": {}
+      },
+      "name": "MergeData",
+      "position": [
+        960,
+        144
+      ],
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "typeVersion": 3,
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [
+        1664,
+        144
+      ],
+      "name": "LoopNode"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Motor Render Universal (Sub-Workflow)"
+        },
+        "mode": "parameter",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "position": [
+        1936,
+        144
+      ],
+      "typeVersion": 1,
+      "name": "ExecuteRenderMotor"
+    },
+    {
+      "parameters": {
+        "jsCode": "function levenshtein(a, b) {\n  if (a.length === 0) return b.length;\n  if (b.length === 0) return a.length;\n  const matrix = [];\n  for (let i = 0; i <= b.length; i++) { matrix[i] = [i]; }\n  for (let j = 0; j <= a.length; j++) { matrix[0][j] = j; }\n  for (let i = 1; i <= b.length; i++) {\n    for (let j = 1; j <= a.length; j++) {\n      if (b.charAt(i - 1) === a.charAt(j - 1)) {\n        matrix[i][j] = matrix[i - 1][j - 1];\n      } else {\n        matrix[i][j] = Math.min(\n          matrix[i - 1][j - 1] + 1,\n          Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)\n        );\n      }\n    }\n  }\n  return matrix[b.length][a.length];\n}\n\nconst unmatchedFiles = $input.all();\nif (!unmatchedFiles || unmatchedFiles.length === 0) return [];\n\nconst allProducts = $node[\"CleanPricing\"].all();\nconst recovered = [];\n\nfor (const file of unmatchedFiles) {\n  const fileKey = file.json.matchKey || \"\";\n  if (!fileKey) continue;\n  \n  let bestMatch = null;\n  let bestSimilarity = 0;\n\n  for (const product of allProducts) {\n    const prodKey = product.json.matchKey || \"\";\n    if (!prodKey) continue;\n    \n    const distance = levenshtein(fileKey, prodKey);\n    const maxLength = Math.max(fileKey.length, prodKey.length);\n    const similarity = maxLength === 0 ? 1 : (maxLength - distance) / maxLength;\n\n    if (similarity >= 0.8 && similarity > bestSimilarity) {\n      bestSimilarity = similarity;\n      bestMatch = product.json;\n    }\n  }\n\n  if (bestMatch) {\n    recovered.push({\n      json: {\n        ...bestMatch,\n        path: file.json.path,\n        fileName: file.json.fileName,\n        categoryRaw: file.json.categoryRaw\n      }\n    });\n  }\n}\n\nreturn recovered;"
+      },
+      "name": "FuzzyMatchCode",
+      "typeVersion": 2,
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1200,
+        320
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "name": "UnionResultados",
+      "position": [
+        1456,
+        144
+      ]
+    }
+  ],
+  "connections": {
+    "CleanPricing": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "MergeData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "LoopNode": {
+      "main": [
+        [],
+        [
+          {
+            "type": "main",
+            "node": "ExecuteRenderMotor",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ManualTrigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "CargarLogo",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "GoogleSheets": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "CleanPricing",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "MergeData": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "UnionResultados",
+            "type": "main"
+          }
+        ],
+        [],
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "FuzzyMatchCode"
+          }
+        ]
+      ]
+    },
+    "SO_FindFiles": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "node": "SO_ParsePaths",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CargarLogo": {
+      "main": [
+        [
+          {
+            "node": "GoogleSheets",
+            "index": 0,
+            "type": "main"
+          },
+          {
+            "type": "main",
+            "node": "SO_FindFiles",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FuzzyMatchCode": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 1,
+            "node": "UnionResultados"
+          }
+        ]
+      ]
+    },
+    "SO_ParsePaths": {
+      "main": [
+        [
+          {
+            "index": 1,
+            "node": "MergeData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "UnionResultados": {
+      "main": [
+        [
+          {
+            "node": "LoopNode",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "ExecuteRenderMotor": {
+      "main": [
+        [
+          {
+            "node": "LoopNode",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionCounter": 3,
+  "tags": []
+}

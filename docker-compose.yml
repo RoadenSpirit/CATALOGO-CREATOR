@@ -1,0 +1,71 @@
+name: n8n-yourbrand
+
+volumes:
+  postgres_data:
+  n8n_data:
+
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: n8n-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ 'CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}' ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    build: .
+    container_name: n8n-app
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      
+      # Inyección del ID para solucionar el error de Antigravity
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+
+      # Forzando las configuraciones iniciales de la documentacion
+      - GENERIC_TIMEZONE=America/Havana
+      - TZ=America/Havana
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      - N8N_RESTRICT_FILE_ACCESS_TO=/data
+
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+
+      # Restaurar los nodos restringidos por defecto (como Execute Command)
+      - NODES_EXCLUDE=[]
+
+      # Permisos Sandbox de n8n para modulos Node
+      - NODE_FUNCTION_ALLOW_BUILTIN=${NODE_FUNCTION_ALLOW_BUILTIN}
+      - NODE_FUNCTION_ALLOW_EXTERNAL=${NODE_FUNCTION_ALLOW_EXTERNAL}
+
+      # Manteniendo tu mapeo de fotos para que no tengas que cambiar tus flujos
+      - YOUR_PHOTOS_PATH=${YOUR_PHOTOS_PATH}
+      - YOUR_LOGO_PATH=${YOUR_LOGO_PATH}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./:/data
+      - ./Html2Image.node.js:/home/node/.n8n/nodes/node_modules/n8n-nodes-html2image/dist/nodes/Html2Image/Html2Image.node.js
+    shm_size: '1gb'
+    init: true
+    security_opt:
+      - seccomp:unconfined

@@ -1,0 +1,351 @@
+{
+  "updatedAt": "2026-02-24T20:03:52.107Z",
+  "createdAt": "2026-02-24T19:37:52.835Z",
+  "id": "M5TuD2DF344Mk7vK",
+  "name": "YourBrand Batch: Imágenes + Precios",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-manual",
+      "name": "Manual Trigger",
+      "position": [
+        0,
+        144
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/data/logo.jpeg",
+        "options": {
+          "dataPropertyName": "dataLogo"
+        }
+      },
+      "id": "cargar-logo",
+      "name": "Cargar Logo",
+      "position": [
+        180,
+        144
+      ],
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "command": "find /data/your-photos-folder -mindepth 2 -type f -not -path \"*/.*\""
+      },
+      "id": "execute-find-command",
+      "name": "Leer Carpetas de Fotos (Comando Nivel SO)",
+      "position": [
+        400,
+        -32
+      ],
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transforma el texto de rutas entregado por OS nativo en el diccionario y compositeKey\nconst result = $input.first().json.stdout;\nif (!result) return [];\n\nconst lines = result.split('\\n').filter(l => l.trim() !== '');\nconst EXT = /\\.(jpg|jpeg|png|webp|gif)$/i;\n\n// Nomalización FUERTE: Quita acentos, todo a MAYÚSCULAS y elimina todo lo que no sea A-Z o números\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str)\n    .normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\") // Quitar acentos/diacríticos\n    .toUpperCase() // Convertir a mayúsculas\n    .replace(/[^A-Z0-9]/g, ''); // Eliminar espacios, guiones, símbolos de $, etc.\n}\n\nconst out = [];\n\nfor (const fullPath of lines) {\n  if (!EXT.test(fullPath)) continue;\n  \n  const parts = fullPath.split('/');\n  const fileName = parts.pop();\n  const categoryRaw = parts.pop();\n  \n  if (!categoryRaw) continue;\n  \n  const category = normalizeName(categoryRaw);\n  const baseName = fileName.replace(/\\.[^.]+$/i, ''); // remover extensión\n  const matchKey = normalizeName(baseName);\n  \n  // Nuestra llave maestra inquebrantable\n  const compositeKey = matchKey + '|' + category;\n  \n  out.push({ json: { path: fullPath, fileName, categoryRaw, category, matchKey, compositeKey } });\n}\n\nreturn out;"
+      },
+      "id": "code-parse-paths",
+      "name": "Convertir Lista a Items",
+      "position": [
+        608,
+        -32
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_INVENTORY/edit?gid=602124776#gid=602124776",
+          "__regex": "https:\\/\\/docs\\.google\\.com\\/spreadsheets\\/d\\/[0-9a-zA-Z\\-_]+.*\\#gid=([0-9]+)"
+        },
+        "options": {}
+      },
+      "id": "google-sheets",
+      "name": "Google Sheets",
+      "position": [
+        400,
+        272
+      ],
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wdFEKETdaDV8ZhiB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Limpieza + categoría desde secciones (--- ACCESORIOS ---) y compositeKey para emparejar\nconst items = $input.all();\nconst cleaned = [];\nconst COL = { codigo: 'CÓDIGO', nombre: 'NOMBRE', precioUsd: 'PRECIO USD', precioCup: 'PRECIO CUP', estado: 'ESTADO' };\n\nfunction safeNum(val) {\n  if (val === null || val === undefined) return null;\n  if (typeof val === 'number' && !Number.isNaN(val)) return val;\n  const s = String(val).replace(/[^0-9.,]/g, '').replace(',', '.');\n  const n = parseFloat(s);\n  return Number.isNaN(n) ? null : n;\n}\n\nfunction safeStr(val) {\n  if (val === null || val === undefined) return '';\n  return String(val).trim();\n}\n\n// Nomalización FUERTE: Quita acentos, todo a MAYÚSCULAS y elimina todo lo que no sea A-Z o números\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str)\n    .normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\") // Quitar acentos/diacríticos\n    .toUpperCase() // Convertir a mayúsculas\n    .replace(/[^A-Z0-9]/g, ''); // Eliminar espacios, guiones, símbolos de $, etc.\n}\n\nfunction isSectionHeader(codigo, nombre) {\n  const c = String(codigo).trim();\n  const n = safeStr(nombre);\n  return c.includes('---') || (!n && !c);\n}\n\nfunction sectionToCategory(codigo) {\n  const m = String(codigo).match(/---\\s*([^---]+)\\s*---/);\n  return m ? normalizeName(m[1]) : null;\n}\n\nlet currentCategory = '';\n\nfor (const item of items) {\n  const row = item.json || item;\n  const codigoRaw = row[COL.codigo];\n  const nombre = safeStr(row[COL.nombre]);\n  const usd = safeNum(row[COL.precioUsd]);\n  const cup = safeNum(row[COL.precioCup]);\n\n  if (isSectionHeader(codigoRaw, nombre)) {\n    const cat = sectionToCategory(codigoRaw);\n    if (cat) currentCategory = cat;\n    continue;\n  }\n  \n  if (!nombre) continue;\n\n  // AHORA DEPEDEMOS COMPLETAMENTE DEL NOMBRE PARA EL MATCH, IGNORANDO EL CÓDIGO\n  const matchKey = normalizeName(nombre);\n  \n  // Si no hay nombre válido, saltamos\n  if (!matchKey) continue;\n\n  const category = currentCategory || 'GENERAL';\n  const compositeKey = matchKey + '|' + category;\n\n  cleaned.push({\n    json: {\n      matchKey,\n      category,\n      compositeKey,\n      codigo: codigoRaw,\n      productId: nombre, // El nombre original para usarlo más adelante si hace falta\n      usdPrice: usd,\n      cupPrice: cup,\n      usdFormatted: usd != null ? `$${Number(usd).toFixed(2)} USD` : 'N/A',\n      cupFormatted: cup != null ? `${Number(cup).toLocaleString('en-US')} CUP` : 'N/A'\n    }\n  });\n}\n\nreturn cleaned;"
+      },
+      "id": "code-clean-pricing",
+      "name": "Limpiar precios (Code)",
+      "position": [
+        608,
+        272
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "matchKey",
+        "options": {}
+      },
+      "id": "merge-data",
+      "name": "Unir producto + imagen (por categoría)",
+      "position": [
+        900,
+        144
+      ],
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop",
+      "name": "Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1150,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Loop').item.json.path }}",
+        "options": {
+          "dataPropertyName": "dataProducto"
+        }
+      },
+      "id": "cargar-imagen",
+      "name": "Cargar Imagen Producto",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "html": "=<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n    <meta charset=\"UTF-8\">\n    <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n    <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n    <link href=\"https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&family=Open+Sans:wght@400;700&display=swap\" rel=\"stylesheet\">\n    <style>\n        body, html {\n            margin: 0; \n            padding: 0; \n            width: 1080px; \n            height: 1080px; \n            overflow: hidden;\n            font-family: 'Open Sans', sans-serif;\n            background: linear-gradient(135deg, #81217b, #4d1549);\n            display: flex;\n            justify-content: center;\n            align-items: center;\n        }\n        \n        .card {\n            width: 960px;\n            height: 960px;\n            background-color: #ffffff;\n            border-radius: 40px;\n            box-shadow: 0 20px 40px rgba(0,0,0,0.4);\n            display: flex;\n            flex-direction: column;\n            position: relative;\n            overflow: hidden;\n        }\n\n        .header {\n            width: 100%;\n            height: 140px;\n            display: flex;\n            align-items: center;\n            padding: 0 40px;\n            box-sizing: border-box;\n            background: #ffffff;\n        }\n\n        .logo {\n            width: 90px;\n            height: 90px;\n            border-radius: 50%;\n            object-fit: cover;\n            border: 2px solid #6d1e68;\n        }\n\n        .brand-text {\n            margin-left: 20px;\n            color: #6d1e68;\n            font-family: 'Montserrat', sans-serif;\n        }\n        .brand-text h3 {\n            margin: 0;\n            font-size: 32px;\n            font-weight: 800;\n            letter-spacing: 1px;\n            text-transform: uppercase;\n        }\n        .brand-text p {\n            margin: 0;\n            font-size: 16px;\n            font-weight: 700;\n            opacity: 0.8;\n            letter-spacing: 4px;\n        }\n\n        .product-container {\n            flex-grow: 1;\n            width: 100%;\n            display: flex;\n            justify-content: center;\n            align-items: center;\n            background-color: #ffffff;\n            padding: 10px 40px 30px 40px;\n            box-sizing: border-box;\n        }\n\n        .product-container img {\n            width: 100%;\n            height: 100%;\n            max-height: 520px;\n            object-fit: contain;\n        }\n\n        .footer {\n            height: 240px;\n            background: #6d1e68;\n            color: white;\n            padding: 30px 50px;\n            box-sizing: border-box;\n            display: flex;\n            flex-direction: column;\n            justify-content: center;\n        }\n\n        .product-name {\n            font-family: 'Montserrat', sans-serif;\n            font-size: 40px;\n            font-weight: 700;\n            margin: 0 0 15px 0;\n            line-height: 1.1;\n            display: -webkit-box;\n            -webkit-line-clamp: 2;\n            -webkit-box-orient: vertical;\n            overflow: hidden;\n            text-overflow: ellipsis;\n        }\n\n        .pricing-box {\n            display: flex;\n            align-items: center;\n            gap: 20px;\n        }\n\n        .price-cup {\n            font-family: 'Montserrat', sans-serif;\n            color: #ffb703;\n            font-size: 56px;\n            font-weight: 800;\n            margin: 0;\n        }\n\n        .price-usd {\n            font-family: 'Montserrat', sans-serif;\n            font-size: 30px;\n            color: #ffffff;\n            font-weight: 700;\n            margin: 0;\n            background: rgba(0,0,0,0.25);\n            padding: 8px 20px;\n            border-radius: 20px;\n        }\n        \n    </style>\n</head>\n<body>\n    <div class=\"card\">\n        <div class=\"header\">\n            <!-- Logo base64 usando validacion n8n -->\n            <img src=\"data:image/jpeg;base64,{{ $('Cargar Logo').first().binary.dataLogo.data }}\" class=\"logo\" />\n            <div class=\"brand-text\">\n                <h3>YourBrand</h3>\n                <p>STORE</p>\n            </div>\n        </div>\n        \n        <div class=\"product-container\">\n            <!-- Producto base64 -->\n            <img src=\"data:image/jpeg;base64,{{ $binary.dataProducto.data }}\" />\n        </div>\n\n        <div class=\"footer\">\n            <h1 class=\"product-name\">{{ $('Loop').item.json.productId }}</h1>\n            <div class=\"pricing-box\">\n                <p class=\"price-cup\">{{ $('Loop').item.json.cupFormatted }}</p>\n                <p class=\"price-usd\">{{ $('Loop').item.json.usdFormatted }}</p>\n            </div>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "render-html",
+      "name": "Render HTML to Image",
+      "type": "n8n-nodes-html2image.html2image",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/fotosProcesadas/{{ $('Loop').item.json.categoryRaw || 'Resultados' }}/{{ $('Loop').item.json.fileName }}",
+        "options": {},
+        "dataPropertyName": "data"
+      },
+      "id": "guardar",
+      "name": "Guardar en fotos_procesadas",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Cargar Logo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Logo": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Leer Carpetas de Fotos (Comando Nivel SO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Limpiar precios (Code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Carpetas de Fotos (Comando Nivel SO)": {
+      "main": [
+        [
+          {
+            "node": "Convertir Lista a Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convertir Lista a Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Unir producto + imagen (por categoría)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Limpiar precios (Code)": {
+      "main": [
+        [
+          {
+            "node": "Unir producto + imagen (por categoría)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unir producto + imagen (por categoría)": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Cargar Imagen Producto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Imagen Producto": {
+      "main": [
+        [
+          {
+            "node": "Render HTML to Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render HTML to Image": {
+      "main": [
+        [
+          {
+            "node": "Guardar en fotos_procesadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en fotos_procesadas": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "0d96415f-4171-4b2e-94e4-c6163db460d4",
+  "activeVersionId": null,
+  "versionCounter": 9,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-02-24T19:37:52.835Z",
+      "createdAt": "2026-02-24T19:37:52.835Z",
+      "role": "workflow:owner",
+      "workflowId": "M5TuD2DF344Mk7vK",
+      "projectId": "wrAcVFBjHe5KMnRw",
+      "project": {
+        "updatedAt": "2026-02-23T16:23:06.834Z",
+        "createdAt": "2026-02-23T16:16:47.824Z",
+        "id": "wrAcVFBjHe5KMnRw",
+        "name": "alvaro aruizriveron@gmail.com <aruiziveron@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "8b0abd32-af58-45bf-ad8b-27cfa3f0ce32"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

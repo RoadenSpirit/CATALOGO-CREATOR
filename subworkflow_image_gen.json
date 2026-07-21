@@ -1,0 +1,66 @@
+﻿{
+    "name":  "Subflow: Generar Imagen YourBrand",
+    "connections":  {
+                        "Render HTML to Image":  {
+                                                     "main":  [
+                                                                  {
+                                                                      "node":  "Guardar Imagen",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                 },
+                        "Execute Workflow Trigger":  {
+                                                         "main":  [
+                                                                      {
+                                                                          "node":  "Render HTML to Image",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                     }
+                    },
+    "nodes":  [
+                  {
+                      "id":  "sub-trigger",
+                      "name":  "Execute Workflow Trigger",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "parameters":  {
+
+                                     },
+                      "typeVersion":  1
+                  },
+                  {
+                      "id":  "render-html-sub",
+                      "name":  "Render HTML to Image",
+                      "type":  "n8n-nodes-html2image.html2image",
+                      "position":  [
+                                       250,
+                                       0
+                                   ],
+                      "parameters":  {
+                                         "html":  "\u003c!DOCTYPE html\u003e..."
+                                     },
+                      "typeVersion":  1
+                  },
+                  {
+                      "id":  "guardar-sub",
+                      "name":  "Guardar Imagen",
+                      "type":  "n8n-nodes-base.readWriteFile",
+                      "position":  [
+                                       500,
+                                       0
+                                   ],
+                      "parameters":  {
+                                         "dataPropertyName":  "data",
+                                         "operation":  "write",
+                                         "fileName":  "={{ .fileName }}"
+                                     },
+                      "typeVersion":  1
+                  }
+              ]
+}

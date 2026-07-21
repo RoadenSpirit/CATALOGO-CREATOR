@@ -1,0 +1,208 @@
+{
+  "name": "Motor Render Universal (Sub-Workflow)",
+  "description": null,
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs'); const path = require('path'); const items = $input.all(); if (items.length === 0) throw new Error('Input vacio en Motor Render'); const item = items[0].json; const marca = item.marca || 'yourbrand'; const logoPath = item.logoPath || '/data/logo.png'; const category = item.categoryRaw || 'Sin_Categoria'; const baseFileName = item.fileName || item.productId || 'imagen'; const productId = item.productId || 'PRODUCTO'; const out = []; try { const logoBuffer = fs.readFileSync(logoPath); const getMime = (p) => { const ext = path.extname(p).toLowerCase(); return (ext === '.png') ? 'image/png' : (ext === '.webp') ? 'image/webp' : 'image/jpeg'; }; const logoMime = getMime(logoPath); const logoBase64 = logoBuffer.toString('base64'); let imagePaths = []; if (item.imagePaths && Array.isArray(item.imagePaths)) { imagePaths = item.imagePaths; } else if (item.productoPath) { imagePaths = [item.productoPath]; } else if (item.path) { imagePaths = [item.path]; } if (imagePaths.length === 0) { throw new Error('No se encontraron rutas de imagenes. Datos recibidos: ' + JSON.stringify(item)); } imagePaths.forEach((imgPath, index) => { const prodBuffer = fs.readFileSync(imgPath); const isVariant = index > 0; const variantSuffix = isVariant ? '_' + index : ''; const finalFileName = baseFileName.replace(/\\.[^.]+$/i, '') + variantSuffix + path.extname(imgPath); const destinoPath = '/data/fotosProcesadas/' + marca + '/' + category + '/' + finalFileName; out.push({ json: { ...item, logoBase64: logoBase64, logoMime: logoMime, productoBase64: prodBuffer.toString('base64'), productoMime: getMime(imgPath), destinoPath: destinoPath, isVariant: isVariant, imageIndex: index, realFileName: finalFileName } }); }); return out; } catch (e) { throw new Error('FALLO LECTURA BATCH: ' + e.message); }"
+      },
+      "name": "Read Files & Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.marca }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "yourbrand"
+            },
+            {
+              "value2": "yourdulceria"
+            }
+          ]
+        }
+      },
+      "name": "Switch Marca",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json; const logoMime = item.logoMime || 'image/jpeg'; const logoBase64 = item.logoBase64 || ''; const productoMime = item.productoMime || 'image/jpeg'; const productoBase64 = item.productoBase64 || ''; const productId = item.productId || 'PRODUCTO'; const cupPrice = item.cupFormatted || (item.cupPrice ? item.cupPrice + ' CUP' : '0 CUP'); const usdPrice = item.usdFormatted || (item.usdPrice ? item.usdPrice + ' USD' : '0 USD'); const copyText = item.copyText || '🛍️ CALIDAD Y ESTILO AL MEJOR PRECIO ✨'; const hasDiscount = item.hasDiscount || false; const oldCup = item.maxCupFormatted || ''; const oldUsd = item.maxUsdFormatted || ''; const diffCup = item.diffCupFormatted ? '-' + item.diffCupFormatted : ''; const diffUsd = item.diffUsdFormatted ? '-' + item.diffUsdFormatted : ''; const talla = item.talla || ''; let discountHtml = ''; if (hasDiscount) { discountHtml = '<div class=\"price-container\"><span class=\"price-val\">' + cupPrice + '</span><div class=\"discount-col\"><span class=\"discount-badge\">' + diffCup + '</span><span class=\"old-price\">' + oldCup + '</span></div><span class=\"price-sep\">/</span><span class=\"price-val\">' + usdPrice + '</span><div class=\"discount-col\"><span class=\"discount-badge\">' + diffUsd + '</span><span class=\"old-price\">' + oldUsd + '</span></div></div>'; } else { discountHtml = '<div class=\"price-container\"><span class=\"price-val\">' + cupPrice + '</span><span class=\"price-sep\">/</span><span class=\"price-val\">' + usdPrice + '</span></div>'; } let tallaHtml = ''; if (talla) { tallaHtml = '<div class=\"talla-tag\"><span class=\"talla-label\">Talla: </span><span class=\"talla-val\">' + talla + '</span></div>'; } const html = '<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"UTF-8\"><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link href=\"https://fonts.googleapis.com/css2?family=Archivo+Black&family=Open+Sans:wght@200;400;600;700&display=swap\" rel=\"stylesheet\"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body, html { width: 1080px; height: 1440px; overflow: hidden; background-color: #6d1e68; font-family: \"Open Sans\", sans-serif; } .main-canvas { width: 1080px; height: 1440px; display: flex; flex-direction: column; position: relative; } .logo-raw { position: absolute; top: 50px; left: 50px; width: 180px; z-index: 100; } .product-area { position: absolute; top: 0; left: 0; width: 1080px; height: 1100px; display: flex; justify-content: center; align-items: center; padding: 20px; } .product-img { max-width: 1040px; max-height: 1000px; object-fit: contain; filter: drop-shadow(0px 35px 65px rgba(0,0,0,0.55)); } .info-footer { position: absolute; bottom: 0; left: 0; width: 1080px; height: 340px; background-color: #ffffff; box-shadow: 0px -15px 40px rgba(0,0,0,0.2); z-index: 10; } .top-left-block { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; align-items: flex-start; } .name-tag { font-family: \"Open Sans\", sans-serif; font-size: 34px; font-weight: 700; color: #2c2c2c; text-decoration: underline; max-width: 1040px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; line-height: 1.1; } .talla-tag { margin-top: 2px; } .talla-label { font-family: \"Open Sans\", sans-serif; font-size: 32px; font-weight: 700; color: #333333; } .talla-val { font-family: \"Open Sans\", sans-serif; font-size: 28px; font-weight: 700; color: #555555; } .center-block { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; display: flex; justify-content: center; align-items: center; } .price-container { display: flex; align-items: flex-end; gap: 15px; } .price-val { font-family: \"Archivo Black\", sans-serif; font-size: 54px; color: #e87b04; line-height: 0.85; } .discount-col { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; line-height: 1.1; margin-bottom: -2px; } .old-price { font-family: \"Open Sans\", sans-serif; font-size: 26px; color: #999999; text-decoration: line-through; margin-bottom: -4px; } .discount-badge { font-family: \"Open Sans\", sans-serif; font-size: 22px; font-weight: 700; color: #d32f2f; margin-bottom: -2px; } .price-sep { font-family: \"Open Sans\", sans-serif; font-size: 70px; font-weight: 200; color: #e87b04; margin: 0 15px; line-height: 0.8; } .slogan-tag { position: absolute; bottom: 25px; left: 0; width: 100%; font-family: \"Open Sans\", sans-serif; font-size: 34px; font-weight: 600; color: #444444; text-align: center; }</style></head><body><div class=\"main-canvas\"><img src=\"data:' + logoMime + ';base64,' + logoBase64 + '\" class=\"logo-raw\" /><div class=\"product-area\"><img src=\"data:' + productoMime + ';base64,' + productoBase64 + '\" class=\"product-img\" /></div><div class=\"info-footer\"><div class=\"top-left-block\"><div class=\"name-tag\">' + productId + '</div>' + tallaHtml + '</div><div class=\"center-block\">' + discountHtml + '</div><div class=\"slogan-tag\">' + copyText + '</div></div></div></body></html>'; return [{ json: { ...item, html: html } }];"
+      },
+      "name": "Set HTML YourBrand",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json; const html = '<html><body style=\"width:1200px;height:1200px;background:#600000;margin:0;display:flex;flex-direction:column;\"><div style=\"flex:1;display:flex;justify-content:center;align-items:center;\"><img src=\"data:' + item.productoMime + ';base64,' + item.productoBase64 + '\" style=\"max-height:900px;object-fit:contain;\"></div><div style=\"background:#C5A059;padding:40px;text-align:center;\"><h1 style=\"font-size:58px;color:#3d0000;\">' + item.productId + '</h1><div style=\"background:#3d0000;color:#C5A059;padding:15px;border-radius:100px;font-size:72px;\">' + (item.cupFormatted || item.cupPrice + ' CUP') + '</div></div></body></html>'; return [{ json: { ...item, html: html } }];"
+      },
+      "name": "Set HTML YourDulceria",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "html": "={{ $json.html }}"
+      },
+      "name": "Render HTML to Image",
+      "type": "n8n-nodes-html2image.html2image",
+      "typeVersion": 1,
+      "position": [
+        944,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "dataPropertyName": "data",
+        "fileName": "={{ $('GenerarRuta').item.json.destinoPath }}"
+      },
+      "name": "Save Result",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs'); const path = require('path'); for (const item of $input.all()) { const data = item.json; const marca = data.marca || 'yourbrand'; const category = data.categoryRaw || 'General'; const fileName = data.fileName || 'imagen.jpg'; const fullPath = '/data/fotosProcesadas/' + marca + '/' + category + '/' + fileName; data.destinoPath = fullPath; const dir = path.dirname(fullPath); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } return $input.all();"
+      },
+      "name": "GenerarRuta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        -16
+      ]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Files & Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Files & Base64": {
+      "main": [
+        [
+          {
+            "node": "Switch Marca",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Marca": {
+      "main": [
+        [
+          {
+            "node": "Set HTML YourBrand",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set HTML YourDulceria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render HTML to Image": {
+      "main": [
+        [
+          {
+            "node": "Save Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set HTML YourBrand": {
+      "main": [
+        [
+          {
+            "node": "GenerarRuta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set HTML YourDulceria": {
+      "main": [
+        [
+          {
+            "node": "GenerarRuta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenerarRuta": {
+      "main": [
+        [
+          {
+            "node": "Render HTML to Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionCounter": 190,
+  "tags": []
+}

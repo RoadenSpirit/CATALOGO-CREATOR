@@ -1,0 +1,105 @@
+{
+  "name": "Gemini Test Patch Render 3",
+  "description": null,
+  "nodes": [
+    {
+      "position": [
+        400,
+        300
+      ],
+      "name": "Manual",
+      "parameters": {},
+      "typeVersion": 1,
+      "type": "n8n-nodes-base.manualTrigger"
+    },
+    {
+      "parameters": {
+        "parameters": {
+          "parameter": [
+            {
+              "name": "marca",
+              "value": "yourbrand"
+            },
+            {
+              "value": "/data/your-photos-folder/Carteras/CARTERA COREANA beige.jpeg",
+              "name": "path"
+            },
+            {
+              "value": "TEST_PATCH_GEMINI_3",
+              "name": "productId"
+            },
+            {
+              "name": "cupPrice",
+              "value": "5000"
+            },
+            {
+              "name": "usdPrice",
+              "value": "20"
+            }
+          ]
+        },
+        "mode": "id",
+        "options": {},
+        "workflowId": "OVcWRaCGB0aGve9L"
+      },
+      "position": [
+        600,
+        300
+      ],
+      "typeVersion": 1,
+      "type": "n8n-nodes-base.executeWorkflow",
+      "name": "Execute Sub-workflow"
+    },
+    {
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "path": "test-patch-render-patch",
+        "httpMethod": "GET",
+        "responseMode": "onReceived"
+      }
+    }
+  ],
+  "connections": {
+    "Manual": {
+      "main": [
+        [
+          {
+            "node": "Execute Sub-workflow",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute Sub-workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": null,
+  "versionCounter": 3,
+  "tags": []
+}

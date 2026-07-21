@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "gemini": "gemini"
+  },
+  "dependencies": {
+    "@google/gemini-cli": "^0.33.1"
+  }
+}

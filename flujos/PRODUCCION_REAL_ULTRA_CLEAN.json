@@ -1,0 +1,992 @@
+{
+  "name": "YourBrand Batch: Imágenes + Drive Inteligente (V3 - SMART SYNC)",
+  "nodes": [
+    {
+      "parameters": {},
+      "position": [
+        -288,
+        144
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "id": "trigger-id",
+      "typeVersion": 1,
+      "name": "ManualTrigger"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/logo.png",
+        "options": {
+          "dataPropertyName": "dataLogo"
+        }
+      },
+      "position": [
+        96,
+        144
+      ],
+      "type": "n8n-nodes-base.readWriteFile",
+      "id": "logo-id",
+      "typeVersion": 1.1,
+      "name": "CargarLogo"
+    },
+    {
+      "parameters": {
+        "command": "find /data/your-photos-folder -mindepth 2 -type f -not -path \\\"*/.*\\\""
+      },
+      "name": "SO_FindFiles",
+      "position": [
+        400,
+        -48
+      ],
+      "id": "find-id",
+      "typeVersion": 1,
+      "type": "n8n-nodes-base.executeCommand"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json.stdout;\nif (!result) return [];\nconst lines = result.split('\\n').map(l => l.trim()).filter(l => l !== '');\nconst out = [];\nfor (const fullPath of lines) {\n  const parts = fullPath.split('/');\n  const fileName = parts.pop();\n  const categoryRaw = parts.pop();\n  if (!categoryRaw) continue;\n  out.push({\n    json: {\n      path: fullPath,\n      fileName,\n      categoryRaw,\n      matchKey: fileName.replace(/\\.[^.]+$/i, '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '')\n    }\n  });\n}\nreturn out;"
+      },
+      "position": [
+        880,
+        -48
+      ],
+      "type": "n8n-nodes-base.code",
+      "id": "parse-id",
+      "typeVersion": 2,
+      "name": "SO_ParsePaths"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "mode": "url",
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=969974582#gid=969974582"
+        },
+        "sheetName": {
+          "mode": "url",
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=969974582#gid=969974582"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        336,
+        368
+      ],
+      "name": "GoogleSheets",
+      "id": "sheets-id",
+      "typeVersion": 4.7,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wdFEKETdaDV8ZhiB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst out = [];\n\nfunction normalizeName(str) {\n  if (!str) return '';\n  return String(str).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n}\n\nconst formatUsd = (val) => '$' + val.toLocaleString('en-US', {\n  minimumFractionDigits: 2,\n  maximumFractionDigits: 2\n}) + ' USD';\nconst formatCup = (val) => '$' + val.toLocaleString('en-US', {\n  maximumFractionDigits: 0\n}) + ' CUP';\n\nfor (const item of items) {\n  const row = item.json;\n  const nombre = row['PRODUCTO'] ? String(row['PRODUCTO']).trim() : '';\n  if (!nombre) continue;\n\n  const actualUsd = parseFloat(row['ACTUAL USD']) || 0;\n  const actualCup = parseFloat(row['ACTUAL CUP']) || 0;\n  const maxUsd = parseFloat(row['MAX HIST USD']) || 0;\n  const maxCup = parseFloat(row['MAX HIST CUP']) || 0;\n\n  const hasDiscount = (maxUsd > actualUsd) && (maxCup > actualCup);\n\n  out.push({\n    json: {\n      ...row,\n      matchKey: normalizeName(nombre),\n      productId: nombre,\n      usdPrice: actualUsd,\n      cupPrice: actualCup,\n      usdFormatted: formatUsd(actualUsd),\n      cupFormatted: formatCup(actualCup),\n      hasDiscount: hasDiscount,\n      maxUsdFormatted: hasDiscount ? formatUsd(maxUsd) : null,\n      maxCupFormatted: hasDiscount ? formatCup(maxCup) : null,\n      diffUsdFormatted: hasDiscount ? formatUsd(maxUsd - actualUsd) : null,\n      diffCupFormatted: hasDiscount ? formatUsd(maxCup - actualCup) : null,\n      categoryRaw: row['CATEGORIA'] || 'General'\n    }\n  });\n}\nreturn out;"
+      },
+      "typeVersion": 2,
+      "id": "pricing-id",
+      "type": "n8n-nodes-base.code",
+      "name": "CleanPricing",
+      "position": [
+        528,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "matchKey",
+        "options": {}
+      },
+      "typeVersion": 3.2,
+      "position": [
+        1152,
+        144
+      ],
+      "name": "MergeData",
+      "type": "n8n-nodes-base.merge",
+      "id": "merge-id"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "position": [
+        1856,
+        128
+      ],
+      "name": "LoopNode",
+      "typeVersion": 3,
+      "id": "loop-id",
+      "type": "n8n-nodes-base.splitInBatches"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "OVcWRaCGB0aGve9L",
+          "cachedResultUrl": "/workflow/OVcWRaCGB0aGve9L",
+          "mode": "list",
+          "cachedResultName": "Motor Render Universal (FINAL V9)"
+        },
+        "workflowInputs": {
+          "matchingColumns": [],
+          "schema": [],
+          "convertFieldsToString": true,
+          "value": {},
+          "attemptToConvertTypes": false,
+          "mappingMode": "defineBelow"
+        },
+        "options": {}
+      },
+      "position": [
+        2096,
+        144
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "id": "exec-id",
+      "name": "ExecuteRenderMotor"
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.destinoPath }}",
+        "options": {}
+      },
+      "position": [
+        2832,
+        144
+      ],
+      "type": "n8n-nodes-base.readWriteFile",
+      "id": "read-binary-common-id",
+      "typeVersion": 1.1,
+      "name": "ReadBinaryFileCommon"
+    },
+    {
+      "parameters": {
+        "jsCode": "const folderMap = {\n  'ACCESORIO': 'YOUR_DRIVE_FOLDER_ACCESORIO',\n  'ACCESORIOS': 'YOUR_DRIVE_FOLDER_ACCESORIO',\n  'CARTERA': 'YOUR_DRIVE_FOLDER_ACCESORIO',\n  'CARTERAS': 'YOUR_DRIVE_FOLDER_ACCESORIO',\n  'ROPA': '1iQcccsvc1YXx7NZl2WnfnR3m5YTHINNr',\n  'ROPAS': '1iQcccsvc1YXx7NZl2WnfnR3m5YTHINNr',\n  'TECNOLOGIA': '1Zgo8Gzjbz9_U1KYBUu3_ZvC9-KqCZkrM',\n  'TECNOLOGIAS': '1Zgo8Gzjbz9_U1KYBUu3_ZvC9-KqCZkrM',\n  'ZAPATO': '1dl3Bf-3NxfBFaqIuxVJFhiTimvAEZF_l',\n  'ZAPATOS': '1dl3Bf-3NxfBFaqIuxVJFhiTimvAEZF_l'\n};\nconst item = $input.first().json;\nconst cat = (item.categoryRaw || 'GENERAL').toUpperCase().trim();\nreturn [{\n  json: {\n    ...item,\n    targetFolderId: folderMap[cat] || 'YOUR_DRIVE_FOLDER_ID'\n  }\n}];"
+      },
+      "name": "MapeoCarpetas",
+      "position": [
+        2256,
+        144
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "id": "mapeo-carpetas-id"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=name = '{{ $json.PRODUCTO }}' and '{{ $json[\"targetFolderId\"] }}' in parents and trashed = false",
+        "returnAll": true,
+        "filter": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "id": "drive-buscar-id",
+      "name": "GoogleDriveBuscar",
+      "position": [
+        2448,
+        144
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "wTBcoUhgAqGc28p8",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🚀 LÓGICA EXPERTA: Decisión de Upsert para Google Drive\nconst item = $('MapeoCarpetas').first().json;\nconst searchInput = $input.first().json;\n\n// Si el nodo anterior (Drive Buscar) devolvió un ID válido, es un UPDATE\n// Al tener alwaysOutputData: true, si no hay resultados, id será undefined\nconst existingFileId = searchInput.id;\n\nreturn [{\n  json: {\n    ...item,\n    action: existingFileId ? 'update' : 'create',\n    targetFileId: existingFileId || null\n  }\n}];"
+      },
+      "typeVersion": 2,
+      "name": "DecidirAccion",
+      "position": [
+        2624,
+        144
+      ],
+      "type": "n8n-nodes-base.code",
+      "id": "decidir-accion-id"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('DecidirAccion').item.json.action }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "id": "7a584b42-24d2-4109-92de-fc3e1f051b03"
+                  }
+                ],
+                "options": {
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                }
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "typeValidation": "strict",
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "version": 3
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "update",
+                    "id": "0735f160-69bb-41b8-bba0-f96ce845aad3",
+                    "leftValue": "={{ $('DecidirAccion').item.json.action }}"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "allMatchingOutputs": true
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "name": "SwitchAccion",
+      "position": [
+        3024,
+        144
+      ],
+      "typeVersion": 3.4,
+      "id": "switch-accion-id"
+    },
+    {
+      "parameters": {
+        "name": "={{ $('DecidirAccion').item.json.PRODUCTO }}",
+        "driveId": {
+          "value": "https://drive.google.com/drive/folders/YOUR_DRIVE_FOLDER_ID",
+          "mode": "url",
+          "__rl": true
+        },
+        "folderId": {
+          "value": "={{ $('DecidirAccion').item.json.targetFolderId }}",
+          "mode": "id",
+          "__rl": true
+        },
+        "options": {}
+      },
+      "position": [
+        3248,
+        64
+      ],
+      "name": "DriveCreate",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "id": "drive-create-id",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "wTBcoUhgAqGc28p8",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('GoogleDriveBuscar').item.json.id }}"
+        },
+        "changeFileContent": true,
+        "options": {
+          "fields": [
+            "*"
+          ]
+        }
+      },
+      "typeVersion": 3,
+      "position": [
+        3248,
+        224
+      ],
+      "name": "DriveUpdate",
+      "type": "n8n-nodes-base.googleDrive",
+      "id": "drive-update-id",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "wTBcoUhgAqGc28p8",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url",
+          "__rl": true
+        },
+        "sheetName": {
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "__rl": true
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CÓDIGO": "={{ $('DecidirAccion').item.json['CÓDIGO'] }}",
+            "P. ACTUAL CUP": "={{ $('DecidirAccion').item.json['ACTUAL CUP'] }}",
+            "IMG": "==HYPERLINK(\"https://drive.google.com/file/d/{{ $json.id }}/view\", IMAGE(\"https://drive.google.com/thumbnail?id={{ $json.id }}&sz=w800\"))\n",
+            "P. ACTUAL USD": "={{ $('DecidirAccion').item.json['ACTUAL USD'] }}",
+            "PRODUCTO": "={{ $('DecidirAccion').item.json.PRODUCTO }}",
+            "row_number": 0,
+            "ESTADO": "PROCESADA"
+          },
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "schema": [
+            {
+              "id": "CÓDIGO",
+              "displayName": "CÓDIGO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "PRODUCTO",
+              "displayName": "PRODUCTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "P. ACTUAL USD",
+              "displayName": "P. ACTUAL USD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "P. ACTUAL CUP",
+              "displayName": "P. ACTUAL CUP",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "IMG",
+              "displayName": "IMG",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ESTADO",
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "typeVersion": 4.7,
+      "id": "sheets-update-id",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        3536,
+        144
+      ],
+      "name": "GoogleSheetsUpdate",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wdFEKETdaDV8ZhiB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url"
+        },
+        "options": {
+          "outputFormatting": {
+            "values": {
+              "general": "UNFORMATTED_VALUE",
+              "date": "FORMATTED_STRING"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        256,
+        576
+      ],
+      "name": "LeerEstadoActual",
+      "id": "LeerEstadoActual-id",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wdFEKETdaDV8ZhiB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🚀 NORMALIZACIÓN EXPERTA DE ESTADO ACTUAL\nreturn $input.all().map(item => {\n  const row = item.json;\n  return {\n    json: {\n      matchKey: (row.PRODUCTO || \"\").normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").toUpperCase().replace(/[^A-Z0-9]/g, ''),\n      imgExistente: row.IMG || \"\",\n      precioUsdExistente: parseFloat(row['P. ACTUAL USD']) || 0,\n      precioCupExistente: parseFloat(row['P. ACTUAL CUP']) || 0\n    }\n  };\n});"
+      },
+      "name": "NormalizarEstado",
+      "position": [
+        864,
+        576
+      ],
+      "typeVersion": 2,
+      "id": "NormalizarEstado-id",
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "matchKey",
+        "options": {}
+      },
+      "name": "MergeConEstado",
+      "type": "n8n-nodes-base.merge",
+      "id": "merge-estado-id",
+      "typeVersion": 3,
+      "position": [
+        1344,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2d70691a-2559-44f4-b8b5-1de05403570f",
+              "leftValue": "={{ $('LeerEstadoActual').item.json.ESTADO }}",
+              "rightValue": "PROCESADA",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "3e47ffe2-37c3-40ad-ab2a-d8e5b8ae2cfd",
+              "leftValue": 4.94,
+              "rightValue": 4.94,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "9c2cc255-61d5-49f6-a61b-f9c08604abd8",
+              "leftValue": 2470,
+              "rightValue": 2470,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": "=",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1584,
+        144
+      ],
+      "id": "d8ca12fa-3d9f-4223-b57c-ce2c98698383",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. EXTRACCIÓN Y VALIDACIÓN DE LA TASA DE CAMBIO\n// Llamamos exactamente al nodo maestro por su nombre literal: 'CONFIG'\nconst nodoConfig = $('CONFIG').first();\n\nif (!nodoConfig || !nodoConfig.json.TASA_CAMBIO_CUP) {\n    throw new Error(\"ERROR CRÍTICO: No se detectó la variable TASA_CAMBIO_CUP en el nodo CONFIG. Revise el enrutamiento.\");\n}\n\nconst tasaCambio = parseFloat(nodoConfig.json.TASA_CAMBIO_CUP);\n\n// Escudo de integridad financiera\nif (isNaN(tasaCambio) || tasaCambio <= 0) {\n    throw new Error(`ERROR DE NEGOCIO: La tasa de cambio introducida (${nodoConfig.json.TASA_CAMBIO_CUP}) no es válida.`);\n}\n\n// 2. PROCESAMIENTO OPTIMIZADO DEL BATCH DE PRODUCTOS\nfor (const item of $input.all()) {\n    const producto = item.json;\n    \n    // Tomamos el ancla inamovible: El precio en USD\n    const precioUSD = parseFloat(producto['ACTUAL USD']);\n\n    // Solo aplicamos la matemática si el producto tiene un precio válido en USD\n    if (!isNaN(precioUSD) && precioUSD > 0) {\n        \n        // A. CÁLCULO MATEMÁTICO (Redondeo comercial)\n        const nuevoPrecioCUP = Math.round(precioUSD * tasaCambio);\n        \n        // B. SOBRESCRITURA DE DATOS DUROS (Backend)\n        producto['ACTUAL CUP'] = nuevoPrecioCUP;\n        producto['cupPrice'] = nuevoPrecioCUP;\n        \n        // C. FORMATEO VISUAL PREMIUM (Frontend / UI)\n        producto['cupFormatted'] = `$${nuevoPrecioCUP.toLocaleString('en-US')} CUP`;\n    }\n}\n\n// 3. RETORNO DEL PAYLOAD LIMPIO Y ACTUALIZADO\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        144
+      ],
+      "id": "63b844aa-888d-4b45-8d7b-0b32bbe06149",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "58f020d2-fd9a-41d0-9c56-5913edec216a",
+              "name": "TASA_CAMBIO_CUP",
+              "value": 510,
+              "type": "number"
+            },
+            {
+              "id": "30558704-f111-4dd3-bf84-e9565bf418f0",
+              "name": "APLICAR_TASA",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -80,
+        144
+      ],
+      "id": "84fe94d9-3f09-4e4d-b820-3ecfd913d68d",
+      "name": "CONFIG"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2324449f-8713-426e-af07-6192afa2124e",
+              "leftValue": "={{ $('CONFIG').item.json.APLICAR_TASA }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        352
+      ],
+      "id": "c4f58ef9-c3ab-4587-94ab-724974561033",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "executeOnce": false,
+        "command": "=mkdir -p \"/data/fotosSeleccionadas/{{ $json.categoryRaw }}\" && cp -n \"{{ $json.path }}\" \"/data/fotosSeleccionadas/{{ $json.categoryRaw }}/{{ $json.fileName }}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1824,
+        416
+      ],
+      "id": "4f5ebfa9-04b0-4b39-97f0-ba14d2f1390c",
+      "name": "GUARDAR FOTOS SELECCIONADAS",
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "MergeConEstado": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GoogleSheetsUpdate": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "LoopNode"
+          }
+        ]
+      ]
+    },
+    "CleanPricing": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LoopNode": {
+      "main": [
+        [],
+        [
+          {
+            "node": "ExecuteRenderMotor",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "LeerEstadoActual": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "NormalizarEstado"
+          }
+        ]
+      ]
+    },
+    "MapeoCarpetas": {
+      "main": [
+        [
+          {
+            "node": "GoogleDriveBuscar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ManualTrigger": {
+      "main": [
+        [
+          {
+            "node": "CONFIG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DriveCreate": {
+      "main": [
+        [
+          {
+            "node": "GoogleSheetsUpdate",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SwitchAccion": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "DriveCreate"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "DriveUpdate",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "GoogleDriveBuscar": {
+      "main": [
+        [
+          {
+            "node": "DecidirAccion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GoogleSheets": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "CleanPricing"
+          }
+        ]
+      ]
+    },
+    "ReadBinaryFileCommon": {
+      "main": [
+        [
+          {
+            "node": "SwitchAccion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NormalizarEstado": {
+      "main": [
+        [
+          {
+            "node": "MergeConEstado",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "SO_FindFiles": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "SO_ParsePaths",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "DriveUpdate": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "GoogleSheetsUpdate"
+          }
+        ]
+      ]
+    },
+    "DecidirAccion": {
+      "main": [
+        [
+          {
+            "node": "ReadBinaryFileCommon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MergeData": {
+      "main": [
+        [
+          {
+            "node": "MergeConEstado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ExecuteRenderMotor": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "MapeoCarpetas"
+          }
+        ]
+      ]
+    },
+    "SO_ParsePaths": {
+      "main": [
+        [
+          {
+            "index": 1,
+            "node": "MergeData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "CargarLogo": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "GoogleSheets"
+          },
+          {
+            "index": 0,
+            "type": "main",
+            "node": "SO_FindFiles"
+          },
+          {
+            "index": 0,
+            "node": "LeerEstadoActual",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "GUARDAR FOTOS SELECCIONADAS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LoopNode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "MergeData",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONFIG": {
+      "main": [
+        [
+          {
+            "node": "CargarLogo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MergeData",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GUARDAR FOTOS SELECCIONADAS": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": false,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

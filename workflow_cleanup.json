@@ -1,0 +1,290 @@
+{
+  "updatedAt": "2026-06-23T20:27:01.568Z",
+  "createdAt": "2026-06-23T19:09:03.778Z",
+  "id": "WcahEPeX9GNfjPWw",
+  "name": "YourBrand: Limpieza de Stock en Google Drive",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "6a9e1a1b-3f2d-4789-8d6e-9e6b4d32a101",
+      "name": "⏰ Cron Trigger",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      },
+      "position": [
+        -400,
+        100
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "9c8b7a6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
+      "name": "▶️ Inicio Manual",
+      "parameters": {},
+      "position": [
+        -400,
+        260
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "googleApi": {
+          "id": "b8wghPeWNy41uIJM",
+          "name": "Google Drive account 6"
+        }
+      },
+      "id": "5b6a7c8d-9e0f-1a2b-3c4d-5e6f7a8b9c0d",
+      "name": "📊 Leer Estados de Productos",
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271"
+        },
+        "options": {},
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271"
+        }
+      },
+      "position": [
+        -100,
+        180
+      ],
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7
+    },
+    {
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      },
+      "id": "d3c2b1a0-e9f8-7a6b-5c4d-3e2f1a0b9c8d",
+      "name": "📂 Listar Subcarpetas Catálogo (Drive)",
+      "parameters": {
+        "options": {},
+        "queryString": "'YOUR_DRIVE_FOLDER_ID' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        "resource": "fileFolder",
+        "returnAll": true,
+        "searchMethod": "query"
+      },
+      "position": [
+        -100,
+        360
+      ],
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3
+    },
+    {
+      "id": "7f8e9a0b-1c2d-3e4f-5a6b-7c8d9e0f1a2b",
+      "name": "⚙️ Construir Query Limpieza",
+      "parameters": {
+        "jsCode": "const folders = $input.all();\nconst ids = folders.map(f => \"'\" + f.json.id + \"' in parents\");\nconst query = \"(\" + ids.join(\" or \") + \") and mimeType contains 'image/' and trashed = false\";\nreturn [{ json: { driveQuery: query } }];"
+      },
+      "position": [
+        140,
+        360
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      },
+      "id": "6c9d8e7f-5a4b-3c2d-1e0f-9a8b7c6d5e4f",
+      "name": "🔍 Listar Fotos Destino (Drive)",
+      "parameters": {
+        "filter": {},
+        "options": {},
+        "queryString": "={{ $json.driveQuery }}",
+        "resource": "fileFolder",
+        "returnAll": true,
+        "searchMethod": "query"
+      },
+      "position": [
+        380,
+        360
+      ],
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3
+    },
+    {
+      "id": "code-identify-orphans-id",
+      "name": "🧠 Identificar Huérfanos",
+      "parameters": {
+        "jsCode": "const sheetsData = $('📊 Leer Estados de Productos').all();\nconst driveData = $('🔍 Listar Fotos Destino (Drive)').all();\n\nconst normalize = (str) => str ? String(str).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '') : '';\n\n// 1. Mapear productos en stock (todos los presentes en esta hoja)\nconst activeProducts = {};\nsheetsData.forEach(item => {\n  const prod = item.json;\n  if (prod.PRODUCTO) {\n    activeProducts[normalize(prod.PRODUCTO)] = true;\n  }\n});\n\nconst filesToDelete = [];\n\n// 2. Buscar fotos en Drive sin stock activo\ndriveData.forEach(item => {\n  const file = item.json;\n  const fileName = file.name;\n  if (!fileName) return;\n  \n  const baseWithoutExt = fileName.replace(/\\.[^.]+$/i, '');\n  \n  let matchKeyRaw = baseWithoutExt;\n  const suffixMatch = baseWithoutExt.match(/[\\s_\\-\\(]+(\\d+)\\)?$/);\n  if (suffixMatch) {\n    matchKeyRaw = baseWithoutExt.substring(0, suffixMatch.index);\n  }\n  \n  const baseKey = matchKeyRaw.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n  \n  if (!activeProducts[baseKey]) {\n    filesToDelete.push({\n      json: {\n        id: file.id,\n        name: fileName\n      }\n    });\n  }\n});\n\nreturn filesToDelete;"
+      },
+      "position": [
+        620,
+        360
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      },
+      "disabled": true,
+      "id": "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+      "name": "🗑️ Eliminar Huérfano (Drive)",
+      "parameters": {
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "operation": "deleteFile",
+        "options": {}
+      },
+      "position": [
+        860,
+        360
+      ],
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3
+    }
+  ],
+  "connections": {
+    "⏰ Cron Trigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "📊 Leer Estados de Productos",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "📂 Listar Subcarpetas Catálogo (Drive)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "▶️ Inicio Manual": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "📊 Leer Estados de Productos",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "📂 Listar Subcarpetas Catálogo (Drive)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "⚙️ Construir Query Limpieza": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "🔍 Listar Fotos Destino (Drive)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "📂 Listar Subcarpetas Catálogo (Drive)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "⚙️ Construir Query Limpieza",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "📊 Leer Estados de Productos": {
+      "main": []
+    },
+    "🔍 Listar Fotos Destino (Drive)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "🧠 Identificar Huérfanos",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "🧠 Identificar Huérfanos": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "🗑️ Eliminar Huérfano (Drive)",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:⏰ Cron Trigger": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": {},
+  "versionId": "cb829b70-61d0-4c26-949b-dbec2aec2b94",
+  "activeVersionId": "cb829b70-61d0-4c26-949b-dbec2aec2b94",
+  "versionCounter": 22,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-23T19:09:03.778Z",
+      "createdAt": "2026-06-23T19:09:03.778Z",
+      "role": "workflow:owner",
+      "workflowId": "WcahEPeX9GNfjPWw",
+      "projectId": "ms8tH4wh3FFjxTYT",
+      "project": {
+        "updatedAt": "2026-04-10T09:30:13.916Z",
+        "createdAt": "2026-04-10T09:12:09.604Z",
+        "id": "ms8tH4wh3FFjxTYT",
+        "name": "alvaro ruiz <yourbrandredes@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "51ee2f38-a3fc-4b00-b883-60cca3d92c58"
+      }
+    }
+  ],
+  "tags": []
+}

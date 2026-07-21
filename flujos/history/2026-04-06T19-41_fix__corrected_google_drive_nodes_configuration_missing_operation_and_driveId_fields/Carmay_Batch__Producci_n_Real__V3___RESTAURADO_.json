@@ -1,0 +1,1027 @@
+{
+  "name": "YourBrand Batch: Producción Real (V3 - RESTAURADO)",
+  "description": null,
+  "nodes": [
+    {
+      "parameters": {},
+      "position": [
+        -496,
+        208
+      ],
+      "typeVersion": 1,
+      "name": "ManualTrigger",
+      "type": "n8n-nodes-base.manualTrigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "TASA_CAMBIO_CUP",
+              "type": "number",
+              "value": 510
+            },
+            {
+              "name": "APLICAR_TASA",
+              "type": "boolean",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "CONFIG",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -304,
+        208
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/logo.png",
+        "options": {
+          "dataPropertyName": "dataLogo"
+        }
+      },
+      "name": "CargarLogo",
+      "position": [
+        -96,
+        208
+      ],
+      "typeVersion": 1.1,
+      "type": "n8n-nodes-base.readWriteFile"
+    },
+    {
+      "parameters": {
+        "command": "find /data/your-photos-folder -mindepth 2 -type f -not -path \"*/.*\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "name": "SO_FindFiles",
+      "position": [
+        112,
+        0
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json.stdout; if (!result) return []; const lines = result.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l !== ''); const out = []; for (const fullPath of lines) { const parts = fullPath.split('/'); const fileName = parts.pop(); const categoryRaw = parts.pop(); if (!categoryRaw) continue; const baseWithoutExt = fileName.replace(/\\.[^.]+$/i, ''); let matchKeyRaw = baseWithoutExt; let isVariant = false; const suffixMatch = baseWithoutExt.match(/[\\s_\\-\\(]+(\\d+)\\)?$/); if (suffixMatch) { isVariant = true; matchKeyRaw = baseWithoutExt.substring(0, suffixMatch.index); } const matchKey = matchKeyRaw.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''); out.push({ json: { path: fullPath, fileName: fileName, categoryRaw: categoryRaw, matchKey: matchKey, isVariant: isVariant, preservedSuffix: suffixMatch ? suffixMatch[0] : '' } }); } return out;"
+      },
+      "typeVersion": 2,
+      "position": [
+        304,
+        0
+      ],
+      "type": "n8n-nodes-base.code",
+      "name": "SO_ParsePaths"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=969974582#gid=969974582",
+          "__rl": true
+        },
+        "sheetName": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=969974582#gid=969974582",
+          "mode": "url",
+          "__rl": true
+        },
+        "options": {}
+      },
+      "typeVersion": 4.7,
+      "type": "n8n-nodes-base.googleSheets",
+      "name": "GoogleSheets",
+      "position": [
+        112,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all(); const out = []; function normalizeName(str) { if (!str) return ''; return String(str).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''); } const formatUsd = (val) => '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD'; const formatCup = (val) => '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' CUP'; for (const item of items) { const row = item.json; const nombre = row['PRODUCTO'] ? String(row['PRODUCTO']).trim() : ''; if (!nombre) continue; const actualUsd = parseFloat(row['ACTUAL USD']) || 0; const actualCup = parseFloat(row['ACTUAL CUP']) || 0; const maxUsd = parseFloat(row['MAX HIST USD']) || 0; const maxCup = parseFloat(row['MAX HIST CUP']) || 0; const hasDiscount = (maxUsd > actualUsd) && (maxCup > actualCup); const tallas = []; for(let i=1; i<=9; i++){ const t = row['T'+i]; if(t && String(t).trim() !== '') tallas.push(String(t).trim()); } const tallaStr = tallas.join(', '); out.push({ json: { ...row, matchKey: normalizeName(nombre), productId: nombre, usdPrice: actualUsd, cupPrice: actualCup, usdFormatted: formatUsd(actualUsd), cupFormatted: formatCup(actualCup), hasDiscount: hasDiscount, maxUsdFormatted: hasDiscount ? formatUsd(maxUsd) : null, maxCupFormatted: hasDiscount ? formatCup(maxCup) : null, diffUsdFormatted: hasDiscount ? formatUsd(maxUsd - actualUsd) : null, diffCupFormatted: hasDiscount ? formatCup(maxCup - actualCup) : null, categoryRaw: row['CATEGORIA'] || 'General', talla: tallaStr } }); } return out;"
+      },
+      "name": "CleanPricing",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        304,
+        400
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "rightValue": true,
+              "leftValue": "={{ $('CONFIG').item.json.APLICAR_TASA }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              }
+            }
+          ],
+          "options": {
+            "version": 3,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "typeVersion": 2.3,
+      "position": [
+        512,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const nodoConfig = $('CONFIG').first(); const tasaCambio = parseFloat(nodoConfig.json.TASA_CAMBIO_CUP); for (const item of $input.all()) { const producto = item.json; const precioUSD = parseFloat(producto['ACTUAL USD']); if (!isNaN(precioUSD) && precioUSD > 0) { const nuevoPrecioCUP = Math.round(precioUSD * tasaCambio); producto['ACTUAL CUP'] = nuevoPrecioCUP; producto['cupPrice'] = nuevoPrecioCUP; producto['cupFormatted'] = '$' + nuevoPrecioCUP.toLocaleString('en-US') + ' CUP'; } } return $input.all();"
+      },
+      "position": [
+        704,
+        304
+      ],
+      "name": "Process_CUP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {},
+      "name": "Sync_AB",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        912,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url"
+        },
+        "options": {
+          "outputFormatting": {
+            "values": {
+              "general": "UNFORMATTED_VALUE",
+              "date": "FORMATTED_STRING"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        112,
+        608
+      ],
+      "typeVersion": 4.7,
+      "name": "LeerEstadoActual",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => { const row = item.json; return { json: { matchKey: (row.PRODUCTO || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''), imgExistente: row.IMG || '', precioUsdExistente: parseFloat(row['P. ACTUAL USD']) || 0, precioCupExistente: parseFloat(row['P. ACTUAL CUP']) || 0, ESTADO: row.ESTADO || '' } }; });"
+      },
+      "name": "NormalizarEstado",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        304,
+        608
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {},
+      "position": [
+        1104,
+        208
+      ],
+      "type": "n8n-nodes-base.merge",
+      "name": "Sync_ABC",
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all(); const inventory = []; const filesMap = {}; const stateMap = {}; for (const item of allItems) { const j = item.json; if (!j.matchKey) continue; if (j.precioUsdExistente !== undefined) { stateMap[j.matchKey] = j; } else if (j.path) { if (!filesMap[j.matchKey]) filesMap[j.matchKey] = []; filesMap[j.matchKey].push(j); } else { inventory.push(j); } } const output = []; for (const p of inventory) { const key = p.matchKey; const productImages = filesMap[key] || []; if (productImages.length === 0) continue; const s = stateMap[key] || {}; const estadoActual = s.ESTADO || ''; const usdOld = parseFloat(s.precioUsdExistente) || 0; const cupOld = parseFloat(s.precioCupExistente) || 0; const usdNew = parseFloat(p.usdPrice) || 0; const cupNew = parseFloat(p.cupPrice) || 0; const hasPriceChanged = (usdOld !== usdNew) || (cupOld !== cupNew); const needsProcessing = !estadoActual.includes('PROCESADA') || hasPriceChanged; if (needsProcessing) { productImages.sort((a, b) => (a.preservedSuffix || '').length - (b.preservedSuffix || '').length); productImages.forEach((img, index) => { output.push({ json: { ...p, ...img, photoIndex: index + 1, totalPhotos: productImages.length, isGallery: productImages.length > 1, isFirstPhoto: index === 0, folderName: p.PRODUCTO } }); }); } } return output;"
+      },
+      "name": "PrepareGalleryData",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "name": "LoopNode",
+      "typeVersion": 3,
+      "position": [
+        1504,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "value": "OVcWRaCGB0aGve9L",
+          "__rl": true,
+          "mode": "list"
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "name": "ExecuteRenderMotor",
+      "typeVersion": 1.3,
+      "position": [
+        1712,
+        208
+      ],
+      "type": "n8n-nodes-base.executeWorkflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const folderMap = { 'ACCESORIO': 'YOUR_DRIVE_FOLDER_ACCESORIO', 'ROPA': '1iQcccsvc1YXx7NZl2WnfnR3m5YTHINNr', 'TECNOLOGIA': '1Zgo8Gzjbz9_U1KYBUu3_ZvC9-KqCZkrM', 'ZAPATOS': '1dl3Bf-3NxfBFaqIuxVJFhiTimvAEZF_l' }; const item = $input.first().json; return [{ json: { ...item, categoryFolderId: folderMap[(item.categoryRaw || 'GENERAL').toUpperCase().trim()] || 'YOUR_DRIVE_FOLDER_ID' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        208
+      ],
+      "name": "MapeoCarpetas"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "leftValue": "={{ $json.isGallery }}",
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "version": 3,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "position": [
+        2208,
+        208
+      ],
+      "typeVersion": 2.3,
+      "name": "If_Is_Gallery"
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.fileName }}",
+        "options": {}
+      },
+      "typeVersion": 1.1,
+      "name": "ReadBinary_Single",
+      "type": "n8n-nodes-base.readWriteFile",
+      "position": [
+        2400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "inputDataFieldName": "data",
+        "name": "={{ $('MapeoCarpetas').item.json.fileName }}",
+        "operation": "upload",
+        "driveId": {
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "value": "={{ $('MapeoCarpetas').item.json.categoryFolderId }}",
+          "mode": "id"
+        }
+      },
+      "typeVersion": 3,
+      "position": [
+        2608,
+        400
+      ],
+      "type": "n8n-nodes-base.googleDrive",
+      "name": "DriveUpload_Single",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "__rl": true
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url"
+        },
+        "columns": {
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "mappingMode": "defineBelow",
+          "value": {
+            "'P. ACTUAL CUP'": "={{ $('MapeoCarpetas').item.json['ACTUAL CUP'] }}",
+            "CÓDIGO": "={{ $('MapeoCarpetas').item.json['CÓDIGO'] }}",
+            "'P. ACTUAL USD'": "={{ $('MapeoCarpetas').item.json['ACTUAL USD'] }}",
+            "PRODUCTO": "={{ $('MapeoCarpetas').item.json.PRODUCTO }}",
+            "ESTADO": "PROCESADA",
+            "IMG": "=HYPERLINK(\"https://drive.google.com/file/d/{{ $json.id }}/view\", IMAGE(\"https://drive.google.com/thumbnail?id={{ $json.id }}&sz=w800\"))"
+          }
+        },
+        "options": {}
+      },
+      "typeVersion": 4.7,
+      "type": "n8n-nodes-base.googleSheets",
+      "name": "SheetUpdate_Single",
+      "position": [
+        2800,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "rightValue": true,
+              "leftValue": "={{ $json.isFirstPhoto }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              }
+            }
+          ],
+          "options": {
+            "version": 3,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2400,
+        0
+      ],
+      "typeVersion": 2.3,
+      "name": "If_Is_First_Photo",
+      "type": "n8n-nodes-base.if"
+    },
+    {
+      "parameters": {
+        "queryString": "=name = '{{ $('MapeoCarpetas').item.json.folderName }}' and '{{ $('MapeoCarpetas').item.json.categoryFolderId }}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'",
+        "resource": "fileFolder",
+        "driveId": {
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "searchMethod": "query",
+        "operation": "search"
+      },
+      "name": "DriveSearch_Folder_First",
+      "type": "n8n-nodes-base.googleDrive",
+      "alwaysOutputData": true,
+      "typeVersion": 3,
+      "position": [
+        2608,
+        -96
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "singleValue": true,
+                "operation": "isNotEmpty",
+                "type": "string"
+              }
+            }
+          ],
+          "options": {
+            "version": 3,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        },
+        "options": {}
+      },
+      "name": "If_Folder_Exists",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        2800,
+        -96
+      ],
+      "typeVersion": 2.3
+    },
+    {
+      "parameters": {
+        "driveId": {
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "fileId": {
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "operation": "delete",
+        "resource": "fileFolder"
+      },
+      "typeVersion": 3,
+      "position": [
+        3008,
+        -208
+      ],
+      "name": "DriveDelete_Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $('MapeoCarpetas').item.json.folderName }}",
+        "driveId": {
+          "value": "My Drive",
+          "mode": "list"
+        },
+        "folderId": {
+          "mode": "id",
+          "value": "={{ $('MapeoCarpetas').item.json.categoryFolderId }}"
+        }
+      },
+      "name": "DriveCreate_Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3200,
+        -96
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "driveId": {
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "operation": "search",
+        "queryString": "=name = '{{ $('MapeoCarpetas').item.json.folderName }}' and '{{ $('MapeoCarpetas').item.json.categoryFolderId }}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'"
+      },
+      "position": [
+        2608,
+        112
+      ],
+      "name": "DriveSearch_Folder_Next",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $('MapeoCarpetas').item.json.fileName }}",
+        "options": {}
+      },
+      "position": [
+        3408,
+        0
+      ],
+      "type": "n8n-nodes-base.readWriteFile",
+      "name": "ReadBinary_Gallery",
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "data",
+        "folderId": {
+          "mode": "id",
+          "value": "={{ $json.id || $json.parents[0] || $node['DriveCreate_Folder'].json.id }}"
+        },
+        "driveId": {
+          "value": "My Drive",
+          "mode": "list"
+        },
+        "name": "={{ $('MapeoCarpetas').item.json.fileName }}",
+        "operation": "upload",
+        "resource": "fileFolder"
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "name": "DriveUpload_Gallery",
+      "typeVersion": 3,
+      "position": [
+        3600,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url",
+          "__rl": true
+        },
+        "sheetName": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=176537271#gid=176537271",
+          "mode": "url",
+          "__rl": true
+        },
+        "columns": {
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "mappingMode": "defineBelow",
+          "value": {
+            "ESTADO": "=\"PROCESADA (\" + $('MapeoCarpetas').item.json.photoIndex + \")\"",
+            "IMG": "=HYPERLINK(\"https://drive.google.com/drive/folders/{{ $json.parents[0] }}\", IMAGE(\"https://drive.google.com/thumbnail?id={{ $json.id }}&sz=w800\"))",
+            "'P. ACTUAL USD'": "={{ $('MapeoCarpetas').item.json['ACTUAL USD'] }}",
+            "PRODUCTO": "={{ $('MapeoCarpetas').item.json.PRODUCTO }}",
+            "'P. ACTUAL CUP'": "={{ $('MapeoCarpetas').item.json['ACTUAL CUP'] }}",
+            "CÓDIGO": "={{ $('MapeoCarpetas').item.json['CÓDIGO'] }}"
+          }
+        },
+        "options": {}
+      },
+      "typeVersion": 4.7,
+      "position": [
+        3808,
+        0
+      ],
+      "name": "SheetUpdate_Gallery",
+      "type": "n8n-nodes-base.googleSheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "If_Is_Gallery": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "If_Is_First_Photo",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "ReadBinary_Single"
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Process_CUP",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "node": "Sync_AB",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "If_Is_First_Photo": {
+      "main": [
+        [
+          {
+            "node": "DriveSearch_Folder_First",
+            "index": 0,
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "type": "main",
+            "node": "DriveSearch_Folder_Next",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LeerEstadoActual": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "NormalizarEstado"
+          }
+        ]
+      ]
+    },
+    "Sync_AB": {
+      "main": [
+        [
+          {
+            "node": "Sync_ABC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync_ABC": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "PrepareGalleryData"
+          }
+        ]
+      ]
+    },
+    "CargarLogo": {
+      "main": [
+        [
+          {
+            "node": "SO_FindFiles",
+            "index": 0,
+            "type": "main"
+          },
+          {
+            "type": "main",
+            "node": "GoogleSheets",
+            "index": 0
+          },
+          {
+            "node": "LeerEstadoActual",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "NormalizarEstado": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 1,
+            "node": "Sync_ABC"
+          }
+        ]
+      ]
+    },
+    "PrepareGalleryData": {
+      "main": [
+        [
+          {
+            "node": "LoopNode",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "If_Folder_Exists": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "DriveDelete_Folder"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "DriveCreate_Folder"
+          }
+        ]
+      ]
+    },
+    "DriveUpload_Gallery": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "SheetUpdate_Gallery"
+          }
+        ]
+      ]
+    },
+    "Process_CUP": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Sync_AB",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "LoopNode": {
+      "main": [
+        [],
+        [
+          {
+            "type": "main",
+            "node": "ExecuteRenderMotor",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ReadBinary_Single": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "DriveUpload_Single"
+          }
+        ]
+      ]
+    },
+    "ManualTrigger": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "node": "CONFIG",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DriveSearch_Folder_First": {
+      "main": [
+        [
+          {
+            "node": "If_Folder_Exists",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SO_FindFiles": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "SO_ParsePaths",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "GoogleSheets": {
+      "main": [
+        [
+          {
+            "node": "CleanPricing",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "CONFIG": {
+      "main": [
+        [
+          {
+            "node": "CargarLogo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DriveCreate_Folder": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "ReadBinary_Gallery",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "MapeoCarpetas": {
+      "main": [
+        [
+          {
+            "node": "If_Is_Gallery",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SheetUpdate_Single": {
+      "main": [
+        [
+          {
+            "node": "LoopNode",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "ReadBinary_Gallery": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "DriveUpload_Gallery"
+          }
+        ]
+      ]
+    },
+    "SO_ParsePaths": {
+      "main": [
+        [
+          {
+            "node": "Sync_AB",
+            "index": 1,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "DriveSearch_Folder_Next": {
+      "main": [
+        [
+          {
+            "type": "main",
+            "index": 0,
+            "node": "ReadBinary_Gallery"
+          }
+        ]
+      ]
+    },
+    "DriveDelete_Folder": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "DriveCreate_Folder"
+          }
+        ]
+      ]
+    },
+    "DriveUpload_Single": {
+      "main": [
+        [
+          {
+            "node": "SheetUpdate_Single",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ExecuteRenderMotor": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "MapeoCarpetas",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "SheetUpdate_Gallery": {
+      "main": [
+        [
+          {
+            "node": "LoopNode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CleanPricing": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "If",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionCounter": 245,
+  "tags": []
+}
