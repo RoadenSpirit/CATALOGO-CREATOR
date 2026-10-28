@@ -20,9 +20,11 @@ flowchart TD
         Chromium["Chromium Headless\n(/usr/bin/chromium)"]
     end
 
-    subgraph Output["Salida Binaria"]
+    subgraph Output["Salida Binaria & Distribución"]
         ImgOut["Búfer de Imagen\n(PNG/JPEG 1080x1440 px)"]
         Sync["Persistencia\n(FS Local / Google Drive)"]
+        WorkerWA["Robot WhatsApp Queue Worker\n(Envío masivo nativo o lotes ZIP)"]
+        BaileysAPI["Baileys WhatsApp REST API\n(:3000 /send-file)"]
     end
 
     GS --> N8N
@@ -33,6 +35,8 @@ flowchart TD
     Chromium -->|Render Buffer| NodeH2I
     NodeH2I --> ImgOut
     ImgOut --> Sync
+    Sync --> WorkerWA
+    WorkerWA -->|POST multipart/form-data| BaileysAPI
 ```
 
 ---
@@ -48,6 +52,7 @@ flowchart TD
 - **`flujos/active/`:**
   - `Motor_Render_Universal__Sub_Workflow_.json`: Subflujo aislado de renderizado que recibe un payload JSON estructurado `{ productId, cupPrice, usdPrice, productoBase64, logoBase64 }` y devuelve el archivo binario generado en memoria.
   - `YourBrand_Batch__Producci_n_Real__V3___RESTAURADO_.json`: Flujo orquestador por lotes con control de iteración y manejo de estados.
+  - `Robot_WhatsApp_Queue_Worker.json`: Worker especializado en la entrega de las imágenes resultantes. Lee productos pendientes de Google Sheets, descarga las imágenes de Drive, comprime lotes de hasta 30 ítems en `.zip` o despacha imágenes individuales con pausas orgánicas vía la API de Baileys.
 - **`docker-compose.yml`:** Orquestador multi-contenedor con servicio PostgreSQL 16 y el contenedor n8n con soporte Chromium preinstalado.
 
 ---
@@ -72,6 +77,8 @@ flowchart TD
 | `YOUR_PHOTOS_PATH`| path | Ruta del volumen local donde residen las fotos brutas |
 | `YOUR_LOGO_PATH` | path | Ruta al archivo PNG del logotipo corporativo |
 | `N8N_RUNNERS_TASK_REQUEST_TIMEOUT` | int | Timeout en segundos para tareas de render intensivo (default: 180) |
+| `BAILEYS_API_URL` | string | URL base del microservicio Baileys WhatsApp |
+| `BAILEYS_API_KEY` | string | Clave de autenticación para envío de archivos multimedia |
 
 ---
 

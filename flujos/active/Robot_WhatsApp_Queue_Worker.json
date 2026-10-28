@@ -1,0 +1,1288 @@
+{
+  "id": "cVilQNdXYZAUH10M",
+  "name": "Robot WhatsApp (Queue Worker)",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "position": [
+        -1216,
+        -176
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "name": "⏰ Temporizador (Cron)",
+      "id": "12345678-1234-1234-1234-123456789012",
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "operator": {
+                "operation": "gt",
+                "type": "number"
+              },
+              "id": "a602cf3c-5bb5-430c-ab22-0d1a49f8cdfb",
+              "rightValue": 0,
+              "leftValue": "={{ $input.all().length }}"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        304,
+        -192
+      ],
+      "typeVersion": 2.2,
+      "id": "34567890-1234-1234-1234-123456789012",
+      "type": "n8n-nodes-base.if",
+      "name": "¿Hay pendientes?"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Get row(s) in sheet').item.json.DRIVE_ID }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "45678901-1234-1234-1234-123456789012",
+      "typeVersion": 3,
+      "position": [
+        1392,
+        128
+      ],
+      "type": "n8n-nodes-base.googleDrive",
+      "name": "📥 Descargar Imagen",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.sleepTimeSecs }}"
+      },
+      "name": "⏳ Pausa Orgánica",
+      "type": "n8n-nodes-base.wait",
+      "id": "89012345-1234-1234-1234-123456789012",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        112
+      ],
+      "webhookId": "ce12175d-034a-43bc-8a82-9f52f59dc152"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "value": "7107636935",
+              "type": "string",
+              "name": "GREEN_API_INSTANCE_ID",
+              "id": "85a0363a-c99b-40d8-ad2c-a2ddfa6e8a66"
+            },
+            {
+              "name": "GREEN_API_TOKEN",
+              "value": "REPLACE_WITH_TOKEN",
+              "type": "string",
+              "id": "1704b3cf-0157-4e4b-bdda-fbd413316a88"
+            },
+            {
+              "value": "120363425558134480",
+              "name": "GREEN_API_CHAT_ID",
+              "type": "string",
+              "id": "0b265f51-5eac-4f71-b5ba-570fa83b35af"
+            },
+            {
+              "value": 50,
+              "name": "INTERVALO_MINUTOS",
+              "type": "number",
+              "id": "e5f6a7b8-c9d0-e1f2-a3b4-c5d6e7f8a9b0"
+            },
+            {
+              "type": "boolean",
+              "value": false,
+              "name": "MODO_ZIP",
+              "id": "modo-zip-id"
+            },
+            {
+              "type": "number",
+              "value": 30,
+              "name": "ZIP_BATCH_SIZE",
+              "id": "zip-batch-size-id"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        -976,
+        -176
+      ],
+      "type": "n8n-nodes-base.set",
+      "name": "⚙️ Variables Globales",
+      "id": "90123456-1234-1234-1234-123456789012",
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "jsCode": "let pendientes = 50;\ntry {\n    const sheetRows = $('Get row(s) in sheet').all();\n    if (Array.isArray(sheetRows)) {\n        pendientes = sheetRows.length;\n    }\n} catch(e) {}\n\nlet segundosEspera = 15;\n\nif (pendientes < 100) segundosEspera = 10;\nif (pendientes < 50)  segundosEspera = 6;\nif (pendientes < 15)  segundosEspera = 3;\n\nconst variacion = Math.random() * 2 - 1;\nlet tiempoFinal = Math.max(2, Math.round(segundosEspera + variacion));\n\nreturn [{ json: { sleepTimeSecs: tiempoFinal } }];"
+      },
+      "name": "🧮 Calcular Delay (Aceleración)",
+      "type": "n8n-nodes-base.code",
+      "id": "78901234-1234-1234-1234-123456789012",
+      "typeVersion": 2,
+      "position": [
+        848,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724",
+          "mode": "url",
+          "__rl": true
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PRODUCTO": "={{ $('✂️ Limitar Lote (Max 5)').all()[$('🔄 Bucle Secuencial (Loop)').context.currentRunIndex].json.PRODUCTO }}",
+            "ESTADO": "COMPLETADO",
+            "FECHA_ENVIO": "={{ $now.setZone('America/Havana').toFormat('yyyy-MM-dd HH:mm:ss') }}"
+          },
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "schema": [
+            {
+              "id": "PRODUCTO",
+              "displayName": "PRODUCTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DRIVE_ID",
+              "displayName": "DRIVE_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ESTADO",
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA_SOLICITUD",
+              "displayName": "FECHA_SOLICITUD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA_ENVIO",
+              "displayName": "FECHA_ENVIO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CATEGORIA",
+              "displayName": "CATEGORIA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2224,
+        -112
+      ],
+      "id": "b98dddf3-2055-444b-a273-663da290f46f",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "j7hN33tnv2xadMZJ",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -704,
+        -176
+      ],
+      "id": "ac75b473-1ca1-44c9-8cf8-98c026e672e9",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "j7hN33tnv2xadMZJ",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtra COMPLETADO y trata SALTADO como pendiente\nconst allItems = $input.all();\nconst pendientes = allItems.filter(item => {\n    const estado = (item.json?.ESTADO || '').toString().trim().toUpperCase();\n    return estado !== 'COMPLETADO';\n});\n\nconsole.log(`📋 Total leídos: ${allItems.length} | Pendientes por enviar (incluyendo SALTADO): ${pendientes.length}`);\n\n// Procesar máximo 5 por ciclo\nreturn pendientes.slice(0, 5);"
+      },
+      "id": "aaaa1111-aaaa-1111-aaaa-111111111111",
+      "name": "✂️ Limitar Lote (Max 5)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "bbbb2222-bbbb-2222-bbbb-222222222222",
+      "name": "🔄 Bucle Secuencial (Loop)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1200,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://whatsapp-api:3000/send-file",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ .BAILEYS_API_KEY || 'REPLACE_WITH_BAILEYS_API_KEY' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chatId",
+              "value": "={{ $('⚙️ Variables Globales').first().json.GREEN_API_CHAT_ID.includes('@') ? $('⚙️ Variables Globales').first().json.GREEN_API_CHAT_ID : $('⚙️ Variables Globales').first().json.GREEN_API_CHAT_ID + '@g.us' }}"
+            },
+            {
+              "name": "fileName",
+              "value": "={{ ($json.PRODUCTO || \"catalogo\").replace(/[/\\\\?%*:|\"<>\\s]/g, \"_\") + \".png\" }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c1111111-1111-1111-1111-111111111111",
+      "name": "💻 Enviar WhatsApp (Nativo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1616,
+        128
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-id-message",
+              "leftValue": "={{ $json.status }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "sent"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "e1111111-1111-1111-1111-111111111111",
+      "name": "🔀 ¿Envío Exitoso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1904,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724",
+          "mode": "url",
+          "__rl": true
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PRODUCTO": "={{ $json.PRODUCTO || $('✂️ Limitar Lote (Max 5)').all()[$('🔄 Bucle Secuencial (Loop)').context.currentRunIndex].json.PRODUCTO }}",
+            "ESTADO": "SALTADO"
+          },
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "schema": [
+            {
+              "id": "PRODUCTO",
+              "displayName": "PRODUCTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DRIVE_ID",
+              "displayName": "DRIVE_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ESTADO",
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA_SOLICITUD",
+              "displayName": "FECHA_SOLICITUD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA_ENVIO",
+              "displayName": "FECHA_ENVIO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CATEGORIA",
+              "displayName": "CATEGORIA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2224,
+        144
+      ],
+      "id": "f2222222-2222-2222-2222-222222222222",
+      "name": "⚠️ Marcar como SALTADO",
+      "credentials": {
+        "googleApi": {
+          "id": "j7hN33tnv2xadMZJ",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('⚙️ Variables Globales').first().json.MODO_ZIP }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "rightValue": true,
+              "id": "cond-modo-zip"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-modo-zip-id",
+      "name": "🔀 ¿Modo ZIP Activo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        608,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $('🔀 ¿Categoría Válida?').all();\nconst pendientes = allItems.filter(item => {\n    const estado = (item.json?.ESTADO || '').toString().trim().toUpperCase();\n    return estado !== 'COMPLETADO';\n});\n\nconst groups = {};\npendientes.forEach(item => {\n  const cat = (item.json?.CATEGORÍA || item.json?.CATEGORIA || 'GENERAL').toString().trim().toUpperCase();\n  if (!groups[cat]) groups[cat] = [];\n  groups[cat].push(item.json);\n});\n\nconst batches = [];\nconst batchSize = $('⚙️ Variables Globales').first().json.ZIP_BATCH_SIZE || 30;\n\nfor (const [category, items] of Object.entries(groups)) {\n  for (let i = 0; i < items.length; i += batchSize) {\n    const chunk = items.slice(i, i + batchSize);\n    batches.push({\n      json: {\n        category: category,\n        batchIndex: Math.floor(i / batchSize) + 1,\n        totalItems: chunk.length,\n        items: chunk\n      }\n    });\n  }\n}\n\nreturn batches;"
+      },
+      "id": "prepare-zip-batches-id",
+      "name": "🧮 Preparar Lotes ZIP (Max 30)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop-zip-batches-id",
+      "name": "🔄 Bucle Lotes ZIP",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1104,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const batch = $input.first().json;\nreturn batch.items.map(item => ({ json: item }));"
+      },
+      "id": "prepare-download-list-id",
+      "name": "🧠 Preparar Lista Descarga",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        -384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.DRIVE_ID }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "download-images-zip-id",
+      "name": "📥 Descargar Imagen ZIP",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1600,
+        -384
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "uQeevSBaFsFPVnYr",
+          "name": "Google Drive account 12"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "compress",
+        "binaryPropertyName": "={{ Object.keys($binary).join(',') }}",
+        "fileName": "={{ $('🔄 Bucle Lotes ZIP').first().json.category.toLowerCase() }}_{{ $('🔄 Bucle Lotes ZIP').first().json.batchIndex }}({{ $('🔄 Bucle Lotes ZIP').first().json.totalItems }}).zip"
+      },
+      "id": "compress-zip-id",
+      "name": "🗜️ Comprimir Lote",
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        2048,
+        -384
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://whatsapp-api:3000/send-file",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ .BAILEYS_API_KEY || 'REPLACE_WITH_BAILEYS_API_KEY' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chatId",
+              "value": "={{ $('⚙️ Variables Globales').first().json.GREEN_API_CHAT_ID.includes('@') ? $('⚙️ Variables Globales').first().json.GREEN_API_CHAT_ID : $('⚙️ Variables Globales').first().json.GREEN_API_CHAT_ID + '@g.us' }}"
+            },
+            {
+              "name": "fileName",
+              "value": "={{ $('🔄 Bucle Lotes ZIP').first().json.category.toLowerCase() }}_{{ $('🔄 Bucle Lotes ZIP').first().json.batchIndex }}({{ $('🔄 Bucle Lotes ZIP').first().json.totalItems }}).zip"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-whatsapp-zip-id",
+      "name": "💻 Enviar WhatsApp ZIP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2288,
+        -384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const batch = $('🔄 Bucle Lotes ZIP').first().json;\nreturn batch.items.map(item => ({ json: item }));"
+      },
+      "id": "prepare-sheets-update-zip-id",
+      "name": "🧠 Preparar Lista Actualizacion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2512,
+        -384
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724",
+          "mode": "url",
+          "__rl": true
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PRODUCTO": "={{ $json.PRODUCTO }}",
+            "FECHA_ENVIO": "={{ $now.setZone('America/Havana').toFormat('yyyy-MM-dd HH:mm:ss') }}",
+            "ESTADO": "COMPLETADO"
+          },
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "schema": [
+            {
+              "id": "PRODUCTO",
+              "displayName": "PRODUCTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DRIVE_ID",
+              "displayName": "DRIVE_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ESTADO",
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA_SOLICITUD",
+              "displayName": "FECHA_SOLICITUD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA_ENVIO",
+              "displayName": "FECHA_ENVIO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CATEGORIA",
+              "displayName": "CATEGORIA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "mark-zip-completed-id",
+      "name": "📝 Marcar Lote COMPLETADO",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2720,
+        -384
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "j7hN33tnv2xadMZJ",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const binaryData = {};\nconst items = $input.all();\n\nitems.forEach((item, index) => {\n  if (item.binary && item.binary.data) {\n    binaryData[`file_${index}`] = item.binary.data;\n  }\n});\n\nreturn [{\n  json: {\n    category: $('🔄 Bucle Lotes ZIP').first().json.category,\n    totalFiles: items.length,\n    items: items.map(item => item.json)\n  },\n  binary: binaryData\n}];"
+      },
+      "id": "consolidar-descargas-id",
+      "name": "📦 Consolidar Descargas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        -384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { loopCompleted: true } }];"
+      },
+      "id": "consolidar-bucle-zip-id",
+      "name": "📦 Consolidar Bucle ZIP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        -384
+      ]
+    },
+    {
+      "parameters": {
+        "command": "rm -rf /tmp/*zip /tmp/n8n-* /tmp/puppeteer_* 2>/dev/null || true"
+      },
+      "id": "clean-temp-files-id",
+      "name": "🧹 Limpiar Temporales",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ ['ACCESORIOS', 'CARTERAS', 'ROPA', 'TECNOLOGIA', 'ZAPATOS'].includes(($json.CATEGORÍA || $json.CATEGORIA || '').toString().trim().toUpperCase()) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "rightValue": true,
+              "id": "cond-val-cat"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-val-cat-id",
+      "name": "🔀 ¿Categoría Válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -208,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724",
+          "mode": "url",
+          "__rl": true
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEETS_ID_MASTER/edit?gid=989610724#gid=989610724"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PRODUCTO": "={{ $json.PRODUCTO }}",
+            "ESTADO": "ERROR: Categoría inválida"
+          },
+          "matchingColumns": [
+            "PRODUCTO"
+          ],
+          "schema": [
+            {
+              "id": "PRODUCTO",
+              "displayName": "PRODUCTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "DRIVE_ID",
+              "displayName": "DRIVE_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ESTADO",
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA_SOLICITUD",
+              "displayName": "FECHA_SOLICITUD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA_ENVIO",
+              "displayName": "FECHA_ENVIO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CATEGORIA",
+              "displayName": "CATEGORIA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "mark-cat-error-id",
+      "name": "📝 Marcar ERROR CATEGORÍA",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        64,
+        208
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "j7hN33tnv2xadMZJ",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.filter(item => {\n  const producto = (item.json?.PRODUCTO || '').toString().trim();\n  const estado = (item.json?.ESTADO || '').toString().trim().toUpperCase();\n  return producto !== '' && estado !== 'COMPLETADO' && !estado.startsWith('ERROR');\n});"
+      },
+      "id": "e8569c63-9378-4356-9686-b4156fa92885",
+      "name": "🔍 Filtrar Pendientes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        -176
+      ]
+    }
+  ],
+  "connections": {
+    "⚙️ Variables Globales": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏰ Temporizador (Cron)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "⚙️ Variables Globales"
+          }
+        ]
+      ]
+    },
+    "🧮 Calcular Delay (Aceleración)": {
+      "main": [
+        [
+          {
+            "node": "⏳ Pausa Orgánica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "🧮 Calcular Delay (Aceleración)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚠️ Marcar como SALTADO": {
+      "main": [
+        [
+          {
+            "node": "🧮 Calcular Delay (Aceleración)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✂️ Limitar Lote (Max 5)": {
+      "main": [
+        [
+          {
+            "node": "¿Hay pendientes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay pendientes?": {
+      "main": [
+        [
+          {
+            "node": "🔀 ¿Modo ZIP Activo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 Bucle Secuencial (Loop)": {
+      "main": [
+        [
+          {
+            "node": "🧹 Limpiar Temporales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📥 Descargar Imagen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏳ Pausa Orgánica": {
+      "main": [
+        [
+          {
+            "node": "🔄 Bucle Secuencial (Loop)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📥 Descargar Imagen": {
+      "main": [
+        [
+          {
+            "node": "💻 Enviar WhatsApp (Nativo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💻 Enviar WhatsApp (Nativo)": {
+      "main": [
+        [
+          {
+            "node": "🔀 ¿Envío Exitoso?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 ¿Envío Exitoso?": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "⚠️ Marcar como SALTADO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 ¿Modo ZIP Activo?": {
+      "main": [
+        [
+          {
+            "node": "🧮 Preparar Lotes ZIP (Max 30)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🧮 Calcular Delay (Aceleración)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧮 Preparar Lotes ZIP (Max 30)": {
+      "main": [
+        [
+          {
+            "node": "🔄 Bucle Lotes ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 Bucle Lotes ZIP": {
+      "main": [
+        [
+          {
+            "node": "🧹 Limpiar Temporales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🧠 Preparar Lista Descarga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧠 Preparar Lista Descarga": {
+      "main": [
+        [
+          {
+            "node": "📥 Descargar Imagen ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📥 Descargar Imagen ZIP": {
+      "main": [
+        [
+          {
+            "node": "📦 Consolidar Descargas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗜️ Comprimir Lote": {
+      "main": [
+        [
+          {
+            "node": "💻 Enviar WhatsApp ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💻 Enviar WhatsApp ZIP": {
+      "main": [
+        [
+          {
+            "node": "🧠 Preparar Lista Actualizacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧠 Preparar Lista Actualizacion": {
+      "main": [
+        [
+          {
+            "node": "📝 Marcar Lote COMPLETADO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 Marcar Lote COMPLETADO": {
+      "main": [
+        [
+          {
+            "node": "📦 Consolidar Bucle ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 Consolidar Descargas": {
+      "main": [
+        [
+          {
+            "node": "🗜️ Comprimir Lote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 Consolidar Bucle ZIP": {
+      "main": [
+        [
+          {
+            "node": "🔄 Bucle Lotes ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 ¿Categoría Válida?": {
+      "main": [
+        [
+          {
+            "node": "✂️ Limitar Lote (Max 5)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📝 Marcar ERROR CATEGORÍA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "🔍 Filtrar Pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 Filtrar Pendientes": {
+      "main": [
+        [
+          {
+            "node": "🔀 ¿Categoría Válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:⏰ Temporizador (Cron)": {
+      "recurrenceRules": []
+    }
+  }
+}
