@@ -58,6 +58,10 @@ services:
       # Manteniendo tu mapeo de fotos para que no tengas que cambiar tus flujos
       - YOUR_PHOTOS_PATH=${YOUR_PHOTOS_PATH}
       - YOUR_LOGO_PATH=${YOUR_LOGO_PATH}
+
+      # Optimización de Task Runners para evitar 'Offer expired' y timeouts de 60s
+      - N8N_RUNNERS_TASK_REQUEST_TIMEOUT=180
+      - N8N_RUNNERS_GRANT_TOKEN_TTL=60
     depends_on:
       postgres:
         condition: service_healthy

@@ -79,7 +79,7 @@ class Html2Image {
         for (let i = 0; i < items.length; i++) {
             const html = this.getNodeParameter('html', i);
             const newItem = {
-                json: {},
+                json: items[i].json,
                 binary: {},
                 pairedItem: { item: i },
             };
@@ -89,8 +89,16 @@ class Html2Image {
                 const image = await (0, node_html_to_image_1.default)({
                     html,
                     puppeteerArgs: {
-                        browser: browser
-                    }
+                        executablePath: '/usr/bin/chromium',
+                        args: [
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-gpu',
+                            '--disable-software-rasterizer'
+                        ]
+                    },
+                    browser: browser
                 });
 
                 if (image instanceof Buffer) {

@@ -1,1 +1,508 @@
-{"updatedAt":"2026-05-11T20:46:47.782Z","createdAt":"2026-04-10T18:59:54.663Z","id":"RLVkKKWYAp51LXtL","name":"Motor Render Universal (Sub-Workflow)","description":null,"active":true,"isArchived":false,"nodes":[{"parameters":{},"name":"📥 Recibir Petición de Diseño","type":"n8n-nodes-base.executeWorkflowTrigger","typeVersion":1,"position":[-272,-192],"notesInFlow":true,"id":"b87586d0-31cb-4c0b-93cf-2699d579f49c","notes":"Recibe los datos crudos y los precios desde el flujo principal para iniciar el proceso de diseño."},{"parameters":{"dataType":"string","value1":"={{ $json.marca }}","rules":{"rules":[{"value2":"yourbrand"},{"value2":"yourdulceria"}]}},"name":"🔀 ¿Qué Marca es?","type":"n8n-nodes-base.switch","typeVersion":1,"position":[352,-224],"notesInFlow":true,"id":"da713eb9-b218-4599-b99b-31a56a7882de","notes":"Dirige la foto a su plantilla HTML correspondiente."},{"parameters":{"jsCode":"const item = $input.first().json;\nconst logoMime = item.logoMime || 'image/jpeg';\nconst logoBase64 = item.logoBase64 || '';\nconst productoMime = item.productoMime || 'image/jpeg';\nconst productoBase64 = item.productoBase64 || '';\nconst productId = item.productId || 'PRODUCTO';\n\n// Lógica de Mensaje Gancho Unificada\nconst ganchos = {\n  \"ROPA\": [\"💜 Tu mejor estilo. Precio justo.\", \"🛡️ Inversión inteligente para tu armario.\", \"⚡ Presencia total. Cero especulación.\", \"🔄 Renueva tu imagen. Calidad que dura.\", \"🎯 Exclusividad diaria a tu alcance.\"],\n  \"ZAPATOS\": [\"✨ Comodidad y elegancia en cada paso.\", \"🛡️ Hechos para durar y destacar.\", \"⚡ Pisa fuerte. Calidad que ahorra.\", \"⚖️ Soporte total. Cero especulación.\", \"🏆 Pasos firmes, inversión segura.\"],\n  \"CARTERAS\": [\"🎒 Espacio y diseño a tu medida.\", \"🛡️ Resistencia diaria, elegancia total.\", \"🎯 Funcionalidad y estilo a precio justo.\", \"💎 Lujo y orden en tus manos.\", \"🌟 Excelencia en cada costura.\"],\n  \"TECNOLOGIA\": [\"🚀 Moderniza tu vida sin pagar de más.\", \"⚡ Rendimiento total. 100% innovación.\", \"🛡️ Máxima potencia, ahorro inteligente.\", \"🌐 El futuro en tus manos, hoy.\", \"🔋 Tecnología real. Paga lo justo.\"],\n  \"ACCESORIOS\": [\"✨ El detalle que lo cambia todo.\", \"🎯 Gran impacto, inversión mínima.\", \"💎 Exclusividad que eleva tu imagen.\", \"💜 Calidad que se nota al instante.\", \"👑 Elegancia pura, precio sin trucos.\"]\n};\nlet copyText = item.copyText;\nif (!copyText) {\n    const cat = item.CATEGORÍA || item.category || item.categoryRaw || 'GENERAL';\n    const opts = ganchos[cat.toUpperCase()];\n    copyText = (opts && opts.length > 0) ? opts[Math.floor(Math.random() * opts.length)] : '🛍️ CALIDAD Y ESTILO AL MEJOR PRECIO ✨';\n}\n\n// CORRECCIÓN DEFINITIVA: Solo los productos en la hoja manual (specialSale) \n// reciben el color verde y el texto \"REBAJA ESPECIAL\".\nif (item.specialSale === true) {\n    copyText = 'REBAJA ESPECIAL';\n}\nconst talla = item.talla || '';\n\n// --- 1. EXTRACCIÓN ROBUSTA DE DATOS ---\nconst actualCup = item.cupPrice || item[\"ACTUAL CUP\"] || 0;\nconst actualUsd = item.usdPrice || item[\"ACTUAL USD\"] || 0;\nconst maxCup = item[\"MAX HIST CUP\"] || actualCup;\nconst maxUsd = item[\"MAX HIST USD\"] || actualUsd;\n\nconst cupRaw = Math.ceil(Number(actualCup));\nconst cupPrice = cupRaw > 0 ? '$' + cupRaw.toLocaleString('en-US') + ' CUP' : '0 CUP';\nconst usdPrice = actualUsd > 0 ? '$' + Number(actualUsd).toFixed(2) + ' USD' : '0 USD';\n\n// La visibilidad del banner rojo central depende de isSale (Cualquier rebaja)\nconst isCupDiscount = (maxCup > actualCup);\nconst isUsdDiscount = (maxUsd > actualUsd);\nconst isDiscountValid = isCupDiscount || isUsdDiscount;\n\n// --- 2. LÓGICA DINÁMICA DE LAYOUT ---\nconst footerHeight = isDiscountValid ? 440 : 320;\nconst productAreaHeight = 1440 - footerHeight;\nconst productImgMaxHeight = productAreaHeight - 40; \n\n// --- 3. CONSTRUCCIÓN DE COMPONENTES DINÁMICOS ---\nlet priceHtml = '';\nlet bannerHtml = '';\n\nif (isDiscountValid) {\n    let oldCupHtml = '';\n    let oldUsdHtml = '';\n    let bannerAmountsStr = '';\n\n    if (isCupDiscount) {\n        const diffCupVal = maxCup - actualCup;\n        const oldCupStr = '$' + Math.ceil(maxCup).toLocaleString('en-US') + ' CUP';\n        const diffCupStr = '$' + Math.ceil(diffCupVal).toLocaleString('en-US') + ' CUP';\n        oldCupHtml = '<span class=\"old-price\">' + oldCupStr + '</span>';\n        bannerAmountsStr += diffCupStr;\n    }\n\n    if (isUsdDiscount) {\n        const diffUsdVal = maxUsd - actualUsd;\n        const oldUsdStr = '$' + Number(maxUsd).toFixed(2) + ' USD';\n        const diffUsdStr = '$' + Number(diffUsdVal).toFixed(2) + ' USD';\n        oldUsdHtml = '<span class=\"old-price\">' + oldUsdStr + '</span>';\n        if (isCupDiscount) bannerAmountsStr += ' <span class=\"banner-sep\">/</span> ' + diffUsdStr;\n        else bannerAmountsStr += diffUsdStr;\n    }\n\n    priceHtml = '<div class=\"price-container\">' +\n        '<span class=\"price-val\">' + cupPrice + '</span>' +\n        oldCupHtml +\n        '<span class=\"price-sep\">/</span>' +\n        '<span class=\"price-val\">' + usdPrice + '</span>' +\n        oldUsdHtml +\n    '</div>';\n\n    bannerHtml = '<div class=\"discount-banner\">' +\n        '<span class=\"banner-title\">AHORRAS</span>' +\n        '<span class=\"banner-amounts\">' + bannerAmountsStr + '</span>' +\n    '</div>';\n} else {\n    priceHtml = '<div class=\"price-container\"><span class=\"price-val\">' + cupPrice + '</span><span class=\"price-sep\">/</span><span class=\"price-val\">' + usdPrice + '</span></div>';\n}\n\nlet tallaHtml = '';\nif (talla) {\n    tallaHtml = '<div class=\"talla-tag\"><span class=\"talla-label\">Talla: </span><span class=\"talla-val\">' + talla + '</span></div>';\n}\n\n// --- 4. RENDERIZADO DOM & CSS ---\nconst html = '<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"UTF-8\"><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link href=\"https://fonts.googleapis.com/css2?family=Archivo+Black&family=Open+Sans:wght@200;400;600;700;800;900&display=swap\" rel=\"stylesheet\"><style>' +\n'* { margin: 0; padding: 0; box-sizing: border-box; } ' +\n'body, html { width: 1080px; height: 1440px; overflow: hidden; background-color: #6d1e68; font-family: \"Open Sans\", sans-serif; } ' +\n'.main-canvas { width: 1080px; height: 1440px; display: flex; flex-direction: column; position: relative; } ' +\n'.logo-raw { position: absolute; top: 50px; left: 50px; width: 180px; z-index: 100; } ' +\n'.product-area { position: absolute; top: 0; left: 0; width: 1080px; height: ' + productAreaHeight + 'px; display: flex; justify-content: center; align-items: center; padding: 20px; } ' +\n'.product-img { max-width: 1040px; max-height: ' + productImgMaxHeight + 'px; object-fit: contain; filter: drop-shadow(0px 35px 65px rgba(0,0,0,0.55)); } ' +\n'.info-footer { position: absolute; bottom: 0; left: 0; width: 1080px; height: ' + footerHeight + 'px; background-color: #ffffff; box-shadow: 0px -15px 40px rgba(0,0,0,0.2); z-index: 10; } ' +\n'.divider-img { position: absolute; top: 0; left: 5%; width: 90%; height: 3px; background: linear-gradient(90deg, rgba(160,160,160,0) 0%, rgba(160,160,160,0.6) 50%, rgba(160,160,160,0) 100%); z-index: 15; } ' +\n'.top-left-block { position: absolute; top: 25px; left: 30px; display: flex; flex-direction: column; align-items: flex-start; } ' +\n'.name-tag { font-family: \"Open Sans\", sans-serif; font-size: 38px; font-weight: 800; color: #2c2c2c; text-decoration: underline; max-width: 1020px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; line-height: 1.1; text-transform: uppercase; } ' +\n'.talla-tag { margin-top: 5px; } ' +\n'.talla-label { font-family: \"Open Sans\", sans-serif; font-size: 32px; font-weight: 700; color: #333333; } ' +\n'.talla-val { font-family: \"Open Sans\", sans-serif; font-size: 32px; font-weight: 700; color: #555555; } ' +\n'.divider-title { position: absolute; top: 110px; left: 5%; width: 90%; height: 3px; background: linear-gradient(90deg, rgba(160,160,160,0) 0%, rgba(160,160,160,0.6) 50%, rgba(160,160,160,0) 100%); z-index: 15; } ' +\n'.center-block { position: absolute; top: 135px; left: 50%; transform: translateX(-50%); width: 100%; display: flex; justify-content: center; align-items: center; } ' +\n'.price-container { display: flex; align-items: baseline; gap: 12px; } ' +\n'.price-val { font-family: \"Archivo Black\", sans-serif; font-size: 52px; font-weight: 900; color: #e87b04; line-height: 0.85; white-space: nowrap; text-shadow: 2px 3px 4px rgba(0,0,0,0.2); } ' +\n'.old-price { font-family: \"Open Sans\", sans-serif; font-size: 30px; color: #999999; text-decoration: line-through; text-decoration-thickness: 3px; font-weight: 700; white-space: nowrap; margin-bottom: -2px; } ' +\n'.price-sep { font-family: \"Open Sans\", sans-serif; font-size: 70px; font-weight: 200; color: #e87b04; margin: 0 10px; line-height: 0.8; text-shadow: 1px 2px 3px rgba(0,0,0,0.1); } ' +\n'.discount-banner { position: absolute; top: 260px; left: 0; width: 1080px; background: linear-gradient(90deg, #d32f2f 0%, #f44336 50%, #d32f2f 100%); color: #ffffff; display: flex; justify-content: center; align-items: center; padding: 6px 0; z-index: 20; box-shadow: 0px 4px 15px rgba(0,0,0,0.15); gap: 20px; } ' +\n'.banner-title { font-family: \"Archivo Black\", sans-serif; font-size: 34px; text-transform: uppercase; letter-spacing: 2px; } ' +\n'.banner-amounts { font-family: \"Archivo Black\", sans-serif; font-size: 45px; display: flex; align-items: center; text-shadow: 2px 3px 6px rgba(0,0,0,0.45); } ' +\n'.banner-sep { font-weight: 200; font-size: 55px; margin: 0 10px; font-family: \"Open Sans\", sans-serif; } ' +\n'.slogan-tag { position: absolute; bottom: 25px; left: 0; width: 100%; font-family: \"Open Sans\", sans-serif; font-size: 34px; font-weight: 800; color: #444444; text-align: center; text-transform: uppercase; }' +\n'.slogan-tag.rebaja { background: #2e7d32; color: #ffffff; width: auto; left: 50%; transform: translateX(-50%); padding: 12px 40px; border-radius: 12px; font-weight: 900; letter-spacing: 2px; box-shadow: 0px 4px 10px rgba(0,0,0,0.2); }' +\n'</style></head><body><div class=\"main-canvas\">' +\n'<img src=\"data:' + logoMime + ';base64,' + logoBase64 + '\" class=\"logo-raw\" />' +\n'<div class=\"product-area\"><img src=\"data:' + productoMime + ';base64,' + productoBase64 + '\" class=\"product-img\" /></div>' +\n'<div class=\"info-footer\">' +\n'<div class=\"divider-img\"></div>' +\n'<div class=\"top-left-block\"><div class=\"name-tag\">' + productId + '</div>' + tallaHtml + '</div>' +\n'<div class=\"divider-title\"></div>' +\n'<div class=\"center-block\">' + priceHtml + '</div>' +\n'<div class=\"divider-bottom\"></div>' +\nbannerHtml +\n'<div class=\"slogan-tag' + (item.specialSale === true ? ' rebaja' : '') + '\">' + copyText + '</div></div></div>' +\n'<script>' +\n'function fitText() {' +\n'  const pContainer = document.querySelector(\".price-container\");' +\n'  if (pContainer && pContainer.offsetWidth > 1000) {' +\n'    const ratio = 1000 / pContainer.offsetWidth;' +\n'    pContainer.style.transform = \"scale(\" + ratio + \")\";' +\n'    pContainer.style.transformOrigin = \"center center\";' +\n'  }' +\n'}' +\n'window.onload = fitText;' +\n'</script></body></html>';\n\nreturn [{ json: { ...item, html: html } }];"},"name":"🎨 Preparar HTML YourBrand","type":"n8n-nodes-base.code","typeVersion":2,"position":[592,-336],"notesInFlow":true,"id":"625eb7a1-e5bf-420c-88be-d2bb93b1f023","notes":"Inyecta la tipografía de YourBrand, los precios y crea la plantilla web."},{"parameters":{"jsCode":"const item = $input.first().json; \nconst html = '<html><body style=\"width:1200px;height:1200px;background:#600000;margin:0;display:flex;flex-direction:column;\"><div style=\"flex:1;display:flex;justify-content:center;align-items:center;\"><img src=\"data:' + item.productoMime + ';base64,' + item.productoBase64 + '\" style=\"max-height:900px;object-fit:contain;\"></div><div style=\"background:#C5A059;padding:40px;text-align:center;\"><h1 style=\"font-size:58px;color:#3d0000;\">' + item.productId + '</h1><div style=\"background:#3d0000;color:#C5A059;padding:15px;border-radius:100px;font-size:72px;\">' + (item.cupFormatted || item.cupPrice + ' CUP') + '</div></div></body></html>'; \nreturn [{ json: { ...item, html: html } }];"},"name":"🎨 Preparar HTML YourDulceria","type":"n8n-nodes-base.code","typeVersion":2,"position":[608,112],"notesInFlow":true,"id":"a9f761fa-3287-444c-9786-98bd3f15b07b","notes":"Inyecta la tipografía de YourDulceria y crea la plantilla web."},{"parameters":{"html":"={{ $json.html }}"},"name":"📸 Renderizar Imagen Final","type":"n8n-nodes-html2image.html2image","typeVersion":1,"position":[1008,-16],"notesInFlow":true,"id":"0696e7bc-f1f8-4b8b-9d82-87baf64405ae","notes":"Transforma el código web (HTML) en una imagen PNG plana y pesada (El diseño final del producto)."},{"parameters":{"authentication":"serviceAccount","operation":"download","fileId":{"value":"={{ $json.driveFileId }}","mode":"id"},"options":{}},"id":"7168be4e-d205-4b64-9643-89a237f04105","name":"📥 Descargar de Drive","type":"n8n-nodes-base.googleDrive","typeVersion":3,"position":[-96,-192],"credentials":{"googleApi":{"id":"j7hN33tnv2xadMZJ","name":"Google Sheets account 4"}}},{"parameters":{"jsCode":"const fs = require('fs');\nconst items = $input.all();\nif (items.length === 0) return [];\n\nconst item = items[0].json;\n\n// Obtener el buffer real descargado de Drive\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n\nconst logoPath = '/data/logo.png';\nlet logoBase64 = '';\nlet logoMime = 'image/png';\n\ntry {\n    const logoBuffer = fs.readFileSync(logoPath);\n    logoBase64 = logoBuffer.toString('base64');\n    if (logoPath.endsWith('.jpeg') || logoPath.endsWith('.jpg')) logoMime = 'image/jpeg';\n} catch (e) {\n    // Logo fallback silencioso\n}\n\nreturn [{\n    json: {\n        ...item,\n        productoBase64: buffer.toString('base64'),\n        productoMime: items[0].binary.data.mimeType || 'image/jpeg',\n        logoBase64: logoBase64,\n        logoMime: logoMime\n    }\n}];"},"id":"505d69bb-cc37-466c-9a3d-f5c9018bc982","name":"🧠 Procesar a Base64 (Fidelidad Local)","type":"n8n-nodes-base.code","typeVersion":2,"position":[96,-192]},{"parameters":{"jsCode":"const items = $input.all();\n\nreturn items.map(item => {\n    const data = item.json;\n    \n    const actualCup = data.cupPrice || data[\"ACTUAL CUP\"] || 0;\n    const actualUsd = data.usdPrice || data[\"ACTUAL USD\"] || 0;\n    const maxUsd = data[\"MAX HIST USD\"] || actualUsd;\n    \n    const numCupPrice = Number(actualCup);\n    \n    if (numCupPrice > 45000 && data.html) {\n        \n        const usdPrice = actualUsd > 0 ? '$' + Number(actualUsd).toFixed(2) + ' USD' : '0 USD';\n        const isUsdDiscount = (maxUsd > actualUsd);\n        \n        let newFooterHtml = '';\n        let cleanHtml = data.html;\n        \n        if (isUsdDiscount) {\n            const diffUsdVal = maxUsd - actualUsd;\n            const oldUsdStr = '$' + Number(maxUsd).toFixed(2) + ' USD';\n            const diffUsdStr = '$' + Number(diffUsdVal).toFixed(2) + ' USD';\n            \n            newFooterHtml = `\n            <div class=\"price-container\" style=\"justify-content: center; align-items: baseline; gap: 20px;\">\n                <span class=\"old-price\" style=\"font-size: 38px; color: #A0A0A0; text-decoration: line-through;\">${oldUsdStr}</span>\n                <span class=\"price-val\" style=\"font-size: 75px; color: #e87b04;\">${usdPrice}</span>\n            </div>`;\n            \n            cleanHtml = cleanHtml.replace(/<div class=\"price-container\">[\\s\\S]*?<\\/div>/, newFooterHtml);\n            \n            const newBannerHtml = `\n            <div class=\"discount-banner\">\n                <span class=\"banner-title\">AHORRAS</span>\n                <span class=\"banner-amounts\">${diffUsdStr}</span>\n            </div>`;\n            cleanHtml = cleanHtml.replace(/<div class=\"discount-banner\">[\\s\\S]*?<\\/div>/, newBannerHtml);\n            \n        } else {\n            newFooterHtml = `\n            <div class=\"price-container\" style=\"justify-content: center;\">\n                <span class=\"price-val\" style=\"font-size: 80px; color: #e87b04;\">${usdPrice}</span>\n            </div>`;\n            \n            cleanHtml = cleanHtml.replace(/<div class=\"price-container\">[\\s\\S]*?<\\/div>/, newFooterHtml);\n            cleanHtml = cleanHtml.replace(/<div class=\"discount-banner\">[\\s\\S]*?<\\/div>/, '');\n        }\n        \n        data.html = cleanHtml;\n    }\n    \n    return { json: data };\n});"},"id":"c99c1a6d-85bc-4a1b-adb4-625210c837b4","name":"⭐ Diseño Premium USD (Temporal)","type":"n8n-nodes-base.code","typeVersion":2,"position":[1056,-336]}],"connections":{"🔀 ¿Qué Marca es?":{"main":[[{"node":"🎨 Preparar HTML YourBrand","type":"main","index":0}],[{"node":"🎨 Preparar HTML YourDulceria","type":"main","index":0}]]},"📥 Recibir Petición de Diseño":{"main":[[{"node":"📥 Descargar de Drive","type":"main","index":0}]]},"📥 Descargar de Drive":{"main":[[{"node":"🧠 Procesar a Base64 (Fidelidad Local)","type":"main","index":0}]]},"🧠 Procesar a Base64 (Fidelidad Local)":{"main":[[{"node":"🔀 ¿Qué Marca es?","type":"main","index":0}]]},"🎨 Preparar HTML YourBrand":{"main":[[{"node":"⭐ Diseño Premium USD (Temporal)","type":"main","index":0}]]},"⭐ Diseño Premium USD (Temporal)":{"main":[[{"node":"📸 Renderizar Imagen Final","type":"main","index":0}]]},"🎨 Preparar HTML YourDulceria":{"main":[[{"node":"📸 Renderizar Imagen Final","type":"main","index":0}]]}},"settings":{"callerPolicy":"workflowsFromSameOwner","executionOrder":"v1","availableInMCP":false,"binaryMode":"separate"},"staticData":null,"meta":null,"pinData":{},"versionId":"3b8e6361-b6b2-432d-b705-058ba836f761","activeVersionId":"3b8e6361-b6b2-432d-b705-058ba836f761","versionCounter":279,"triggerCount":0,"shared":[{"updatedAt":"2026-04-10T18:59:54.663Z","createdAt":"2026-04-10T18:59:54.663Z","role":"workflow:owner","workflowId":"RLVkKKWYAp51LXtL","projectId":"ms8tH4wh3FFjxTYT","project":{"updatedAt":"2026-04-10T09:30:13.916Z","createdAt":"2026-04-10T09:12:09.604Z","id":"ms8tH4wh3FFjxTYT","name":"alvaro ruiz <yourbrandredes@gmail.com>","type":"personal","icon":null,"description":null,"creatorId":"51ee2f38-a3fc-4b00-b883-60cca3d92c58"}}],"tags":[],"activeVersion":{"updatedAt":"2026-05-11T20:46:47.783Z","createdAt":"2026-05-11T20:46:47.783Z","versionId":"3b8e6361-b6b2-432d-b705-058ba836f761","workflowId":"RLVkKKWYAp51LXtL","nodes":[{"parameters":{},"name":"📥 Recibir Petición de Diseño","type":"n8n-nodes-base.executeWorkflowTrigger","typeVersion":1,"position":[-272,-192],"notesInFlow":true,"id":"b87586d0-31cb-4c0b-93cf-2699d579f49c","notes":"Recibe los datos crudos y los precios desde el flujo principal para iniciar el proceso de diseño."},{"parameters":{"dataType":"string","value1":"={{ $json.marca }}","rules":{"rules":[{"value2":"yourbrand"},{"value2":"yourdulceria"}]}},"name":"🔀 ¿Qué Marca es?","type":"n8n-nodes-base.switch","typeVersion":1,"position":[352,-224],"notesInFlow":true,"id":"da713eb9-b218-4599-b99b-31a56a7882de","notes":"Dirige la foto a su plantilla HTML correspondiente."},{"parameters":{"jsCode":"const item = $input.first().json;\nconst logoMime = item.logoMime || 'image/jpeg';\nconst logoBase64 = item.logoBase64 || '';\nconst productoMime = item.productoMime || 'image/jpeg';\nconst productoBase64 = item.productoBase64 || '';\nconst productId = item.productId || 'PRODUCTO';\n\n// Lógica de Mensaje Gancho Unificada\nconst ganchos = {\n  \"ROPA\": [\"💜 Tu mejor estilo. Precio justo.\", \"🛡️ Inversión inteligente para tu armario.\", \"⚡ Presencia total. Cero especulación.\", \"🔄 Renueva tu imagen. Calidad que dura.\", \"🎯 Exclusividad diaria a tu alcance.\"],\n  \"ZAPATOS\": [\"✨ Comodidad y elegancia en cada paso.\", \"🛡️ Hechos para durar y destacar.\", \"⚡ Pisa fuerte. Calidad que ahorra.\", \"⚖️ Soporte total. Cero especulación.\", \"🏆 Pasos firmes, inversión segura.\"],\n  \"CARTERAS\": [\"🎒 Espacio y diseño a tu medida.\", \"🛡️ Resistencia diaria, elegancia total.\", \"🎯 Funcionalidad y estilo a precio justo.\", \"💎 Lujo y orden en tus manos.\", \"🌟 Excelencia en cada costura.\"],\n  \"TECNOLOGIA\": [\"🚀 Moderniza tu vida sin pagar de más.\", \"⚡ Rendimiento total. 100% innovación.\", \"🛡️ Máxima potencia, ahorro inteligente.\", \"🌐 El futuro en tus manos, hoy.\", \"🔋 Tecnología real. Paga lo justo.\"],\n  \"ACCESORIOS\": [\"✨ El detalle que lo cambia todo.\", \"🎯 Gran impacto, inversión mínima.\", \"💎 Exclusividad que eleva tu imagen.\", \"💜 Calidad que se nota al instante.\", \"👑 Elegancia pura, precio sin trucos.\"]\n};\nlet copyText = item.copyText;\nif (!copyText) {\n    const cat = item.CATEGORÍA || item.category || item.categoryRaw || 'GENERAL';\n    const opts = ganchos[cat.toUpperCase()];\n    copyText = (opts && opts.length > 0) ? opts[Math.floor(Math.random() * opts.length)] : '🛍️ CALIDAD Y ESTILO AL MEJOR PRECIO ✨';\n}\n\n// CORRECCIÓN DEFINITIVA: Solo los productos en la hoja manual (specialSale) \n// reciben el color verde y el texto \"REBAJA ESPECIAL\".\nif (item.specialSale === true) {\n    copyText = 'REBAJA ESPECIAL';\n}\nconst talla = item.talla || '';\n\n// --- 1. EXTRACCIÓN ROBUSTA DE DATOS ---\nconst actualCup = item.cupPrice || item[\"ACTUAL CUP\"] || 0;\nconst actualUsd = item.usdPrice || item[\"ACTUAL USD\"] || 0;\nconst maxCup = item[\"MAX HIST CUP\"] || actualCup;\nconst maxUsd = item[\"MAX HIST USD\"] || actualUsd;\n\nconst cupRaw = Math.ceil(Number(actualCup));\nconst cupPrice = cupRaw > 0 ? '$' + cupRaw.toLocaleString('en-US') + ' CUP' : '0 CUP';\nconst usdPrice = actualUsd > 0 ? '$' + Number(actualUsd).toFixed(2) + ' USD' : '0 USD';\n\n// La visibilidad del banner rojo central depende de isSale (Cualquier rebaja)\nconst isCupDiscount = (maxCup > actualCup);\nconst isUsdDiscount = (maxUsd > actualUsd);\nconst isDiscountValid = isCupDiscount || isUsdDiscount;\n\n// --- 2. LÓGICA DINÁMICA DE LAYOUT ---\nconst footerHeight = isDiscountValid ? 440 : 320;\nconst productAreaHeight = 1440 - footerHeight;\nconst productImgMaxHeight = productAreaHeight - 40; \n\n// --- 3. CONSTRUCCIÓN DE COMPONENTES DINÁMICOS ---\nlet priceHtml = '';\nlet bannerHtml = '';\n\nif (isDiscountValid) {\n    let oldCupHtml = '';\n    let oldUsdHtml = '';\n    let bannerAmountsStr = '';\n\n    if (isCupDiscount) {\n        const diffCupVal = maxCup - actualCup;\n        const oldCupStr = '$' + Math.ceil(maxCup).toLocaleString('en-US') + ' CUP';\n        const diffCupStr = '$' + Math.ceil(diffCupVal).toLocaleString('en-US') + ' CUP';\n        oldCupHtml = '<span class=\"old-price\">' + oldCupStr + '</span>';\n        bannerAmountsStr += diffCupStr;\n    }\n\n    if (isUsdDiscount) {\n        const diffUsdVal = maxUsd - actualUsd;\n        const oldUsdStr = '$' + Number(maxUsd).toFixed(2) + ' USD';\n        const diffUsdStr = '$' + Number(diffUsdVal).toFixed(2) + ' USD';\n        oldUsdHtml = '<span class=\"old-price\">' + oldUsdStr + '</span>';\n        if (isCupDiscount) bannerAmountsStr += ' <span class=\"banner-sep\">/</span> ' + diffUsdStr;\n        else bannerAmountsStr += diffUsdStr;\n    }\n\n    priceHtml = '<div class=\"price-container\">' +\n        '<span class=\"price-val\">' + cupPrice + '</span>' +\n        oldCupHtml +\n        '<span class=\"price-sep\">/</span>' +\n        '<span class=\"price-val\">' + usdPrice + '</span>' +\n        oldUsdHtml +\n    '</div>';\n\n    bannerHtml = '<div class=\"discount-banner\">' +\n        '<span class=\"banner-title\">AHORRAS</span>' +\n        '<span class=\"banner-amounts\">' + bannerAmountsStr + '</span>' +\n    '</div>';\n} else {\n    priceHtml = '<div class=\"price-container\"><span class=\"price-val\">' + cupPrice + '</span><span class=\"price-sep\">/</span><span class=\"price-val\">' + usdPrice + '</span></div>';\n}\n\nlet tallaHtml = '';\nif (talla) {\n    tallaHtml = '<div class=\"talla-tag\"><span class=\"talla-label\">Talla: </span><span class=\"talla-val\">' + talla + '</span></div>';\n}\n\n// --- 4. RENDERIZADO DOM & CSS ---\nconst html = '<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"UTF-8\"><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link href=\"https://fonts.googleapis.com/css2?family=Archivo+Black&family=Open+Sans:wght@200;400;600;700;800;900&display=swap\" rel=\"stylesheet\"><style>' +\n'* { margin: 0; padding: 0; box-sizing: border-box; } ' +\n'body, html { width: 1080px; height: 1440px; overflow: hidden; background-color: #6d1e68; font-family: \"Open Sans\", sans-serif; } ' +\n'.main-canvas { width: 1080px; height: 1440px; display: flex; flex-direction: column; position: relative; } ' +\n'.logo-raw { position: absolute; top: 50px; left: 50px; width: 180px; z-index: 100; } ' +\n'.product-area { position: absolute; top: 0; left: 0; width: 1080px; height: ' + productAreaHeight + 'px; display: flex; justify-content: center; align-items: center; padding: 20px; } ' +\n'.product-img { max-width: 1040px; max-height: ' + productImgMaxHeight + 'px; object-fit: contain; filter: drop-shadow(0px 35px 65px rgba(0,0,0,0.55)); } ' +\n'.info-footer { position: absolute; bottom: 0; left: 0; width: 1080px; height: ' + footerHeight + 'px; background-color: #ffffff; box-shadow: 0px -15px 40px rgba(0,0,0,0.2); z-index: 10; } ' +\n'.divider-img { position: absolute; top: 0; left: 5%; width: 90%; height: 3px; background: linear-gradient(90deg, rgba(160,160,160,0) 0%, rgba(160,160,160,0.6) 50%, rgba(160,160,160,0) 100%); z-index: 15; } ' +\n'.top-left-block { position: absolute; top: 25px; left: 30px; display: flex; flex-direction: column; align-items: flex-start; } ' +\n'.name-tag { font-family: \"Open Sans\", sans-serif; font-size: 38px; font-weight: 800; color: #2c2c2c; text-decoration: underline; max-width: 1020px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; line-height: 1.1; text-transform: uppercase; } ' +\n'.talla-tag { margin-top: 5px; } ' +\n'.talla-label { font-family: \"Open Sans\", sans-serif; font-size: 32px; font-weight: 700; color: #333333; } ' +\n'.talla-val { font-family: \"Open Sans\", sans-serif; font-size: 32px; font-weight: 700; color: #555555; } ' +\n'.divider-title { position: absolute; top: 110px; left: 5%; width: 90%; height: 3px; background: linear-gradient(90deg, rgba(160,160,160,0) 0%, rgba(160,160,160,0.6) 50%, rgba(160,160,160,0) 100%); z-index: 15; } ' +\n'.center-block { position: absolute; top: 135px; left: 50%; transform: translateX(-50%); width: 100%; display: flex; justify-content: center; align-items: center; } ' +\n'.price-container { display: flex; align-items: baseline; gap: 12px; } ' +\n'.price-val { font-family: \"Archivo Black\", sans-serif; font-size: 52px; font-weight: 900; color: #e87b04; line-height: 0.85; white-space: nowrap; text-shadow: 2px 3px 4px rgba(0,0,0,0.2); } ' +\n'.old-price { font-family: \"Open Sans\", sans-serif; font-size: 30px; color: #999999; text-decoration: line-through; text-decoration-thickness: 3px; font-weight: 700; white-space: nowrap; margin-bottom: -2px; } ' +\n'.price-sep { font-family: \"Open Sans\", sans-serif; font-size: 70px; font-weight: 200; color: #e87b04; margin: 0 10px; line-height: 0.8; text-shadow: 1px 2px 3px rgba(0,0,0,0.1); } ' +\n'.discount-banner { position: absolute; top: 260px; left: 0; width: 1080px; background: linear-gradient(90deg, #d32f2f 0%, #f44336 50%, #d32f2f 100%); color: #ffffff; display: flex; justify-content: center; align-items: center; padding: 6px 0; z-index: 20; box-shadow: 0px 4px 15px rgba(0,0,0,0.15); gap: 20px; } ' +\n'.banner-title { font-family: \"Archivo Black\", sans-serif; font-size: 34px; text-transform: uppercase; letter-spacing: 2px; } ' +\n'.banner-amounts { font-family: \"Archivo Black\", sans-serif; font-size: 45px; display: flex; align-items: center; text-shadow: 2px 3px 6px rgba(0,0,0,0.45); } ' +\n'.banner-sep { font-weight: 200; font-size: 55px; margin: 0 10px; font-family: \"Open Sans\", sans-serif; } ' +\n'.slogan-tag { position: absolute; bottom: 25px; left: 0; width: 100%; font-family: \"Open Sans\", sans-serif; font-size: 34px; font-weight: 800; color: #444444; text-align: center; text-transform: uppercase; }' +\n'.slogan-tag.rebaja { background: #2e7d32; color: #ffffff; width: auto; left: 50%; transform: translateX(-50%); padding: 12px 40px; border-radius: 12px; font-weight: 900; letter-spacing: 2px; box-shadow: 0px 4px 10px rgba(0,0,0,0.2); }' +\n'</style></head><body><div class=\"main-canvas\">' +\n'<img src=\"data:' + logoMime + ';base64,' + logoBase64 + '\" class=\"logo-raw\" />' +\n'<div class=\"product-area\"><img src=\"data:' + productoMime + ';base64,' + productoBase64 + '\" class=\"product-img\" /></div>' +\n'<div class=\"info-footer\">' +\n'<div class=\"divider-img\"></div>' +\n'<div class=\"top-left-block\"><div class=\"name-tag\">' + productId + '</div>' + tallaHtml + '</div>' +\n'<div class=\"divider-title\"></div>' +\n'<div class=\"center-block\">' + priceHtml + '</div>' +\n'<div class=\"divider-bottom\"></div>' +\nbannerHtml +\n'<div class=\"slogan-tag' + (item.specialSale === true ? ' rebaja' : '') + '\">' + copyText + '</div></div></div>' +\n'<script>' +\n'function fitText() {' +\n'  const pContainer = document.querySelector(\".price-container\");' +\n'  if (pContainer && pContainer.offsetWidth > 1000) {' +\n'    const ratio = 1000 / pContainer.offsetWidth;' +\n'    pContainer.style.transform = \"scale(\" + ratio + \")\";' +\n'    pContainer.style.transformOrigin = \"center center\";' +\n'  }' +\n'}' +\n'window.onload = fitText;' +\n'</script></body></html>';\n\nreturn [{ json: { ...item, html: html } }];"},"name":"🎨 Preparar HTML YourBrand","type":"n8n-nodes-base.code","typeVersion":2,"position":[592,-336],"notesInFlow":true,"id":"625eb7a1-e5bf-420c-88be-d2bb93b1f023","notes":"Inyecta la tipografía de YourBrand, los precios y crea la plantilla web."},{"parameters":{"jsCode":"const item = $input.first().json; \nconst html = '<html><body style=\"width:1200px;height:1200px;background:#600000;margin:0;display:flex;flex-direction:column;\"><div style=\"flex:1;display:flex;justify-content:center;align-items:center;\"><img src=\"data:' + item.productoMime + ';base64,' + item.productoBase64 + '\" style=\"max-height:900px;object-fit:contain;\"></div><div style=\"background:#C5A059;padding:40px;text-align:center;\"><h1 style=\"font-size:58px;color:#3d0000;\">' + item.productId + '</h1><div style=\"background:#3d0000;color:#C5A059;padding:15px;border-radius:100px;font-size:72px;\">' + (item.cupFormatted || item.cupPrice + ' CUP') + '</div></div></body></html>'; \nreturn [{ json: { ...item, html: html } }];"},"name":"🎨 Preparar HTML YourDulceria","type":"n8n-nodes-base.code","typeVersion":2,"position":[608,112],"notesInFlow":true,"id":"a9f761fa-3287-444c-9786-98bd3f15b07b","notes":"Inyecta la tipografía de YourDulceria y crea la plantilla web."},{"parameters":{"html":"={{ $json.html }}"},"name":"📸 Renderizar Imagen Final","type":"n8n-nodes-html2image.html2image","typeVersion":1,"position":[1008,-16],"notesInFlow":true,"id":"0696e7bc-f1f8-4b8b-9d82-87baf64405ae","notes":"Transforma el código web (HTML) en una imagen PNG plana y pesada (El diseño final del producto)."},{"parameters":{"authentication":"serviceAccount","operation":"download","fileId":{"value":"={{ $json.driveFileId }}","mode":"id"},"options":{}},"id":"7168be4e-d205-4b64-9643-89a237f04105","name":"📥 Descargar de Drive","type":"n8n-nodes-base.googleDrive","typeVersion":3,"position":[-96,-192],"credentials":{"googleApi":{"id":"j7hN33tnv2xadMZJ","name":"Google Sheets account 4"}}},{"parameters":{"jsCode":"const fs = require('fs');\nconst items = $input.all();\nif (items.length === 0) return [];\n\nconst item = items[0].json;\n\n// Obtener el buffer real descargado de Drive\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n\nconst logoPath = '/data/logo.png';\nlet logoBase64 = '';\nlet logoMime = 'image/png';\n\ntry {\n    const logoBuffer = fs.readFileSync(logoPath);\n    logoBase64 = logoBuffer.toString('base64');\n    if (logoPath.endsWith('.jpeg') || logoPath.endsWith('.jpg')) logoMime = 'image/jpeg';\n} catch (e) {\n    // Logo fallback silencioso\n}\n\nreturn [{\n    json: {\n        ...item,\n        productoBase64: buffer.toString('base64'),\n        productoMime: items[0].binary.data.mimeType || 'image/jpeg',\n        logoBase64: logoBase64,\n        logoMime: logoMime\n    }\n}];"},"id":"505d69bb-cc37-466c-9a3d-f5c9018bc982","name":"🧠 Procesar a Base64 (Fidelidad Local)","type":"n8n-nodes-base.code","typeVersion":2,"position":[96,-192]},{"parameters":{"jsCode":"const items = $input.all();\n\nreturn items.map(item => {\n    const data = item.json;\n    \n    const actualCup = data.cupPrice || data[\"ACTUAL CUP\"] || 0;\n    const actualUsd = data.usdPrice || data[\"ACTUAL USD\"] || 0;\n    const maxUsd = data[\"MAX HIST USD\"] || actualUsd;\n    \n    const numCupPrice = Number(actualCup);\n    \n    if (numCupPrice > 45000 && data.html) {\n        \n        const usdPrice = actualUsd > 0 ? '$' + Number(actualUsd).toFixed(2) + ' USD' : '0 USD';\n        const isUsdDiscount = (maxUsd > actualUsd);\n        \n        let newFooterHtml = '';\n        let cleanHtml = data.html;\n        \n        if (isUsdDiscount) {\n            const diffUsdVal = maxUsd - actualUsd;\n            const oldUsdStr = '$' + Number(maxUsd).toFixed(2) + ' USD';\n            const diffUsdStr = '$' + Number(diffUsdVal).toFixed(2) + ' USD';\n            \n            newFooterHtml = `\n            <div class=\"price-container\" style=\"justify-content: center; align-items: baseline; gap: 20px;\">\n                <span class=\"old-price\" style=\"font-size: 38px; color: #A0A0A0; text-decoration: line-through;\">${oldUsdStr}</span>\n                <span class=\"price-val\" style=\"font-size: 75px; color: #e87b04;\">${usdPrice}</span>\n            </div>`;\n            \n            cleanHtml = cleanHtml.replace(/<div class=\"price-container\">[\\s\\S]*?<\\/div>/, newFooterHtml);\n            \n            const newBannerHtml = `\n            <div class=\"discount-banner\">\n                <span class=\"banner-title\">AHORRAS</span>\n                <span class=\"banner-amounts\">${diffUsdStr}</span>\n            </div>`;\n            cleanHtml = cleanHtml.replace(/<div class=\"discount-banner\">[\\s\\S]*?<\\/div>/, newBannerHtml);\n            \n        } else {\n            newFooterHtml = `\n            <div class=\"price-container\" style=\"justify-content: center;\">\n                <span class=\"price-val\" style=\"font-size: 80px; color: #e87b04;\">${usdPrice}</span>\n            </div>`;\n            \n            cleanHtml = cleanHtml.replace(/<div class=\"price-container\">[\\s\\S]*?<\\/div>/, newFooterHtml);\n            cleanHtml = cleanHtml.replace(/<div class=\"discount-banner\">[\\s\\S]*?<\\/div>/, '');\n        }\n        \n        data.html = cleanHtml;\n    }\n    \n    return { json: data };\n});"},"id":"c99c1a6d-85bc-4a1b-adb4-625210c837b4","name":"⭐ Diseño Premium USD (Temporal)","type":"n8n-nodes-base.code","typeVersion":2,"position":[1056,-336]}],"connections":{"🔀 ¿Qué Marca es?":{"main":[[{"node":"🎨 Preparar HTML YourBrand","type":"main","index":0}],[{"node":"🎨 Preparar HTML YourDulceria","type":"main","index":0}]]},"📥 Recibir Petición de Diseño":{"main":[[{"node":"📥 Descargar de Drive","type":"main","index":0}]]},"📥 Descargar de Drive":{"main":[[{"node":"🧠 Procesar a Base64 (Fidelidad Local)","type":"main","index":0}]]},"🧠 Procesar a Base64 (Fidelidad Local)":{"main":[[{"node":"🔀 ¿Qué Marca es?","type":"main","index":0}]]},"🎨 Preparar HTML YourBrand":{"main":[[{"node":"⭐ Diseño Premium USD (Temporal)","type":"main","index":0}]]},"⭐ Diseño Premium USD (Temporal)":{"main":[[{"node":"📸 Renderizar Imagen Final","type":"main","index":0}]]},"🎨 Preparar HTML YourDulceria":{"main":[[{"node":"📸 Renderizar Imagen Final","type":"main","index":0}]]}},"authors":"alvaro ruiz","name":null,"description":null,"autosaved":false,"workflowPublishHistory":[{"createdAt":"2026-05-28T19:46:29.115Z","id":78,"workflowId":"RLVkKKWYAp51LXtL","versionId":"3b8e6361-b6b2-432d-b705-058ba836f761","event":"activated","userId":"51ee2f38-a3fc-4b00-b883-60cca3d92c58"}]}}
+{
+  "updatedAt": "2026-05-11T20:46:47.782Z",
+  "createdAt": "2026-04-10T18:59:54.663Z",
+  "id": "RLVkKKWYAp51LXtL",
+  "name": "Motor Render Universal (Sub-Workflow)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "📥 Recibir Petición de Diseño",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        -192
+      ],
+      "notesInFlow": true,
+      "id": "b87586d0-31cb-4c0b-93cf-2699d579f49c",
+      "notes": "Recibe los datos crudos y los precios desde el flujo principal para iniciar el proceso de diseño."
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.marca }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "yourbrand"
+            },
+            {
+              "value2": "yourdulceria"
+            }
+          ]
+        }
+      },
+      "name": "🔀 ¿Qué Marca es?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        352,
+        -224
+      ],
+      "notesInFlow": true,
+      "id": "da713eb9-b218-4599-b99b-31a56a7882de",
+      "notes": "Dirige la foto a su plantilla HTML correspondiente."
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst logoMime = item.logoMime || 'image/jpeg';\nconst logoBase64 = item.logoBase64 || '';\nconst productoMime = item.productoMime || 'image/jpeg';\nconst productoBase64 = item.productoBase64 || '';\nconst productId = item.productId || 'PRODUCTO';\nconst descripcion = (item.DESCRIPCION || item.DESCRIPCIÓN) ? String(item.DESCRIPCION || item.DESCRIPCIÓN).trim() : '';\nconst hasSpecs = descripcion.length > 0;\nconst SPEC_AREA = 150;\n\n// Lógica de Mensaje Gancho Unificada\nconst ganchos = {\n  \"ROPA\": [\"💜 Tu mejor estilo. Precio justo.\", \"🛡️ Inversión inteligente para tu armario.\", \"⚡ Presencia total. Cero especulación.\", \"🔄 Renueva tu imagen. Calidad que dura.\", \"🎯 Exclusividad diaria a tu alcance.\"],\n  \"ZAPATOS\": [\"✨ Comodidad y elegancia en cada paso.\", \"🛡️ Hechos para durar y destacar.\", \"⚡ Pisa fuerte. Calidad que ahorra.\", \"⚖️ Soporte total. Cero especulación.\", \"🏆 Pasos firmes, inversión segura.\"],\n  \"CARTERAS\": [\"🎒 Espacio y diseño a tu medida.\", \"🛡️ Resistencia diaria, elegancia total.\", \"🎯 Funcionalidad y estilo a precio justo.\", \"💎 Lujo y orden en tus manos.\", \"🌟 Excelencia en cada costura.\"],\n  \"TECNOLOGIA\": [\"🚀 Moderniza tu vida sin pagar de más.\", \"⚡ Rendimiento total. 100% innovación.\", \"🛡️ Máxima potencia, ahorro inteligente.\", \"🌐 El futuro en tus manos, hoy.\", \"🔋 Tecnología real. Paga lo justo.\"],\n  \"ACCESORIOS\": [\"✨ El detalle que lo cambia todo.\", \"🎯 Gran impacto, inversión mínima.\", \"💎 Exclusividad que eleva tu imagen.\", \"💜 Calidad que se nota al instante.\", \"👑 Elegancia pura, precio sin trucos.\"]\n};\nlet copyText = item.copyText;\nif (!copyText) {\n    const cat = item.CATEGORÍA || item.category || item.categoryRaw || 'GENERAL';\n    const opts = ganchos[cat.toUpperCase()];\n    copyText = (opts && opts.length > 0) ? opts[Math.floor(Math.random() * opts.length)] : '🛍️ CALIDAD Y ESTILO AL MEJOR PRECIO ✨';\n}\n\n// CORRECCIÓN DEFINITIVA: Solo los productos en la hoja manual (specialSale) \n// reciben el color verde y el texto \"REBAJA ESPECIAL\".\nif (item.specialSale === true) {\n    copyText = 'REBAJA ESPECIAL';\n}\nconst talla = item.talla || '';\n\n// --- 1. EXTRACCIÓN ROBUSTA DE DATOS ---\nconst actualCup = item.cupPrice || item[\"ACTUAL CUP\"] || 0;\nconst actualUsd = item.usdPrice || item[\"ACTUAL USD\"] || 0;\nconst maxCup = item[\"MAX HIST CUP\"] || actualCup;\nconst maxUsd = item[\"MAX HIST USD\"] || actualUsd;\n\nconst cupRaw = Math.ceil(Number(actualCup));\nconst cupPrice = cupRaw > 0 ? '$' + cupRaw.toLocaleString('en-US') + ' CUP' : '0 CUP';\nconst formatUsd = (val) => {\n    const num = Number(val);\n    if (isNaN(num) || num <= 0) return '0 USD';\n    return '$' + (num % 1 === 0 ? num.toFixed(0) : num.toFixed(2)) + ' USD';\n};\nconst usdPrice = formatUsd(actualUsd);\n\n// La visibilidad del banner rojo central depende de isSale (Cualquier rebaja)\nconst isCupDiscount = (maxCup > actualCup);\nconst isUsdDiscount = (maxUsd > actualUsd);\nconst isDiscountValid = isCupDiscount || isUsdDiscount;\n\n// --- 2. LÓGICA DINÁMICA DE LAYOUT ---\nconst footerHeight = isDiscountValid ? 440 : 320;\nconst finalFooterHeight = hasSpecs ? footerHeight + SPEC_AREA : footerHeight;\nconst productAreaHeight = 1440 - finalFooterHeight;\nconst productImgMaxHeight = productAreaHeight - 40; \n\n// --- 3. CONSTRUCCIÓN DE COMPONENTES DINÁMICOS ---\nlet priceHtml = '';\nlet bannerHtml = '';\n\nif (isDiscountValid) {\n    let oldCupHtml = '';\n    let oldUsdHtml = '';\n    let bannerAmountsStr = '';\n\n    if (isCupDiscount) {\n        const diffCupVal = maxCup - actualCup;\n        const oldCupStr = '$' + Math.ceil(maxCup).toLocaleString('en-US') + ' CUP';\n        const diffCupStr = '$' + Math.ceil(diffCupVal).toLocaleString('en-US') + ' CUP';\n        oldCupHtml = '<span class=\"old-price\">' + oldCupStr + '</span>';\n        bannerAmountsStr += diffCupStr;\n    }\n\n    if (isUsdDiscount) {\n        const diffUsdVal = maxUsd - actualUsd;\n        const oldUsdStr = formatUsd(maxUsd);\n        const diffUsdStr = formatUsd(diffUsdVal);\n        oldUsdHtml = '<span class=\"old-price\">' + oldUsdStr + '</span>';\n        if (isCupDiscount) bannerAmountsStr += ' <span class=\"banner-sep\">/</span> ' + diffUsdStr;\n        else bannerAmountsStr += diffUsdStr;\n    }\n\n    priceHtml = '<div class=\"price-container\">' +\n        '<span class=\"price-val\">' + cupPrice + '</span>' +\n        oldCupHtml +\n        '<span class=\"price-sep\">/</span>' +\n        '<span class=\"price-val\">' + usdPrice + '</span>' +\n        oldUsdHtml +\n    '</div>';\n\n    bannerHtml = '<div class=\"discount-banner\">' +\n        '<span class=\"banner-title\">AHORRAS</span>' +\n        '<span class=\"banner-amounts\">' + bannerAmountsStr + '</span>' +\n    '</div>';\n} else {\n    priceHtml = '<div class=\"price-container\"><span class=\"price-val\">' + cupPrice + '</span><span class=\"price-sep\">/</span><span class=\"price-val\">' + usdPrice + '</span></div>';\n}\n\nlet tallaHtml = '';\nif (talla) {\n    tallaHtml = '<div class=\"talla-tag\"><span class=\"talla-label\">Talla: </span><span class=\"talla-val\">' + talla + '</span></div>';\n}\nlet specsHtml = '';\nif (hasSpecs) {\n    const specTop = isDiscountValid ? '335px' : '215px';\n    specsHtml = '<div class=\"spec-block\" style=\"top: ' + specTop + '; height: 150px;\">' + descripcion + '</div>';\n}\n\n// --- 4. RENDERIZADO DOM & CSS ---\nconst html = '<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"UTF-8\"><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link href=\"https://fonts.googleapis.com/css2?family=Archivo+Black&family=Open+Sans:wght@200;400;600;700;800;900&display=swap\" rel=\"stylesheet\"><style>' +\n'* { margin: 0; padding: 0; box-sizing: border-box; } ' +\n'body, html { width: 1080px; height: 1440px; overflow: hidden; background-color: #6d1e68; font-family: \"Open Sans\", sans-serif; } ' +\n'.main-canvas { width: 1080px; height: 1440px; display: flex; flex-direction: column; position: relative; } ' +\n'.logo-raw { position: absolute; top: 50px; left: 50px; width: 180px; z-index: 100; } ' +\n'.product-area { position: absolute; top: 0; left: 0; width: 1080px; height: ' + productAreaHeight + 'px; display: flex; justify-content: center; align-items: center; padding: 20px; } ' +\n'.product-img { max-width: 1040px; max-height: ' + productImgMaxHeight + 'px; object-fit: contain; filter: drop-shadow(0px 35px 65px rgba(0,0,0,0.55)); } ' +\n'.info-footer { position: absolute; bottom: 0; left: 0; width: 1080px; height: ' + finalFooterHeight + 'px; background-color: #ffffff; box-shadow: 0px -15px 40px rgba(0,0,0,0.2); z-index: 10; } ' +\n'.divider-img { position: absolute; top: 0; left: 5%; width: 90%; height: 3px; background: linear-gradient(90deg, rgba(160,160,160,0) 0%, rgba(160,160,160,0.6) 50%, rgba(160,160,160,0) 100%); z-index: 15; } ' +\n'.top-left-block { position: absolute; top: 25px; left: 30px; display: flex; flex-direction: column; align-items: flex-start; } ' +\n'.name-tag { font-family: \"Open Sans\", sans-serif; font-size: 38px; font-weight: 900; color: #000000; text-decoration: underline; max-width: 1020px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; line-height: 1.1; text-transform: uppercase; } ' +\n'.talla-tag { margin-top: 5px; } ' +\n'.talla-label { font-family: \"Open Sans\", sans-serif; font-size: 32px; font-weight: 700; color: #333333; } ' +\n'.talla-val { font-family: \"Open Sans\", sans-serif; font-size: 32px; font-weight: 700; color: #555555; } ' +\n'.divider-title { position: absolute; top: 110px; left: 5%; width: 90%; height: 3px; background: linear-gradient(90deg, rgba(160,160,160,0) 0%, rgba(160,160,160,0.6) 50%, rgba(160,160,160,0) 100%); z-index: 15; } ' +\n'.center-block { position: absolute; top: 135px; left: 50%; transform: translateX(-50%); width: 100%; display: flex; justify-content: center; align-items: center; } ' +\n'.price-container { display: flex; align-items: baseline; gap: 12px; } ' +\n'.price-val { font-family: \"Archivo Black\", sans-serif; font-size: 52px; font-weight: 900; color: #e87b04; line-height: 0.85; white-space: nowrap; text-shadow: 2px 3px 4px rgba(0,0,0,0.2); } ' +\n'.old-price { font-family: \"Open Sans\", sans-serif; font-size: 30px; color: #999999; text-decoration: line-through; text-decoration-thickness: 3px; font-weight: 700; white-space: nowrap; margin-bottom: -2px; } ' +\n'.price-sep { font-family: \"Open Sans\", sans-serif; font-size: 70px; font-weight: 200; color: #e87b04; margin: 0 10px; line-height: 0.8; text-shadow: 1px 2px 3px rgba(0,0,0,0.1); } ' +\n'.discount-banner { position: absolute; top: 260px; left: 0; width: 1080px; background: linear-gradient(90deg, #d32f2f 0%, #f44336 50%, #d32f2f 100%); color: #ffffff; display: flex; justify-content: center; align-items: center; padding: 6px 0; z-index: 20; box-shadow: 0px 4px 15px rgba(0,0,0,0.15); gap: 20px; } ' +\n'.banner-title { font-family: \"Archivo Black\", sans-serif; font-size: 34px; text-transform: uppercase; letter-spacing: 2px; } ' +\n'.banner-amounts { font-family: \"Archivo Black\", sans-serif; font-size: 45px; display: flex; align-items: center; text-shadow: 2px 3px 6px rgba(0,0,0,0.45); } ' +\n'.banner-sep { font-weight: 200; font-size: 55px; margin: 0 10px; font-family: \"Open Sans\", sans-serif; } ' +\n'.slogan-tag { position: absolute; bottom: 25px; left: 0; width: 100%; font-family: \"Open Sans\", sans-serif; font-size: 34px; font-weight: 800; color: #444444; text-align: center; text-transform: uppercase; }' +\n'.slogan-tag.rebaja { background: #2e7d32; color: #ffffff; width: auto; left: 50%; transform: translateX(-50%); padding: 12px 40px; border-radius: 12px; font-weight: 900; letter-spacing: 2px; box-shadow: 0px 4px 10px rgba(0,0,0,0.2); }' +\n'.spec-block { position: absolute; left: 0; width: 100%; display: flex; justify-content: center; align-items: center; padding: 0 60px; font-family: \"Open Sans\", sans-serif; font-size: 26px; font-weight: 600; color: #333333; text-align: center; line-height: 1.5; word-wrap: break-word; overflow-wrap: break-word; } ' +\n'</style></head><body><div class=\"main-canvas\">' +\n'<img src=\"data:' + logoMime + ';base64,' + logoBase64 + '\" class=\"logo-raw\" />' +\n'<div class=\"product-area\"><img src=\"data:' + productoMime + ';base64,' + productoBase64 + '\" class=\"product-img\" /></div>' +\n'<div class=\"info-footer\">' +\n'<div class=\"divider-img\"></div>' +\n'<div class=\"top-left-block\"><div class=\"name-tag\">' + productId + '</div>' + tallaHtml + '</div>' +\n'<div class=\"divider-title\"></div>' +\n'<div class=\"center-block\">' + priceHtml + '</div>' +\n'<div class=\"divider-bottom\"></div>' +\nbannerHtml +\nspecsHtml +\n'<div class=\"slogan-tag' + (item.specialSale === true ? ' rebaja' : '') + '\">' + copyText + '</div></div></div>' +\n'<script>' +\n'function fitText() {' +\n'  const pContainer = document.querySelector(\".price-container\");' +\n'  if (pContainer && pContainer.offsetWidth > 1000) {' +\n'    const ratio = 1000 / pContainer.offsetWidth;' +\n'    pContainer.style.transform = \"scale(\" + ratio + \")\";' +\n'    pContainer.style.transformOrigin = \"center center\";' +\n'  }' +\n'}' +\n'window.onload = fitText;' +\n'</script></body></html>';\n\nreturn [{ json: { ...item, html: html } }];"
+      },
+      "name": "🎨 Preparar HTML YourBrand",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        -336
+      ],
+      "notesInFlow": true,
+      "id": "625eb7a1-e5bf-420c-88be-d2bb93b1f023",
+      "notes": "Inyecta la tipografía de YourBrand, los precios y crea la plantilla web."
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json; \nconst html = '<html><body style=\"width:1200px;height:1200px;background:#600000;margin:0;display:flex;flex-direction:column;\"><div style=\"flex:1;display:flex;justify-content:center;align-items:center;\"><img src=\"data:' + item.productoMime + ';base64,' + item.productoBase64 + '\" style=\"max-height:900px;object-fit:contain;\"></div><div style=\"background:#C5A059;padding:40px;text-align:center;\"><h1 style=\"font-size:58px;color:#3d0000;\">' + item.productId + '</h1><div style=\"background:#3d0000;color:#C5A059;padding:15px;border-radius:100px;font-size:72px;\">' + (item.cupFormatted || item.cupPrice + ' CUP') + '</div></div></body></html>'; \nreturn [{ json: { ...item, html: html } }];"
+      },
+      "name": "🎨 Preparar HTML YourDulceria",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        112
+      ],
+      "notesInFlow": true,
+      "id": "a9f761fa-3287-444c-9786-98bd3f15b07b",
+      "notes": "Inyecta la tipografía de YourDulceria y crea la plantilla web."
+    },
+    {
+      "parameters": {
+        "html": "={{ $json.html }}"
+      },
+      "name": "📸 Renderizar Imagen Final",
+      "type": "n8n-nodes-html2image.html2image",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        -16
+      ],
+      "notesInFlow": true,
+      "id": "0696e7bc-f1f8-4b8b-9d82-87baf64405ae",
+      "notes": "Transforma el código web (HTML) en una imagen PNG plana y pesada (El diseño final del producto)."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "download",
+        "fileId": {
+          "value": "={{ $json.driveFileId }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "7168be4e-d205-4b64-9643-89a237f04105",
+      "name": "📥 Descargar de Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -96,
+        -192
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "j7hN33tnv2xadMZJ",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst items = $input.all();\nif (items.length === 0) return [];\n\nconst item = items[0].json;\n\n// Obtener el buffer real descargado de Drive\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n\nconst logoPath = '/data/logo.png';\nlet logoBase64 = '';\nlet logoMime = 'image/png';\n\ntry {\n    const logoBuffer = fs.readFileSync(logoPath);\n    logoBase64 = logoBuffer.toString('base64');\n    if (logoPath.endsWith('.jpeg') || logoPath.endsWith('.jpg')) logoMime = 'image/jpeg';\n} catch (e) {\n    // Logo fallback silencioso\n}\n\nreturn [{\n    json: {\n        ...item,\n        productoBase64: buffer.toString('base64'),\n        productoMime: items[0].binary.data.mimeType || 'image/jpeg',\n        logoBase64: logoBase64,\n        logoMime: logoMime\n    }\n}];"
+      },
+      "id": "505d69bb-cc37-466c-9a3d-f5c9018bc982",
+      "name": "🧠 Procesar a Base64 (Fidelidad Local)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n    const data = item.json;\n    \n    const actualCup = data.cupPrice || data[\"ACTUAL CUP\"] || 0;\n    const actualUsd = data.usdPrice || data[\"ACTUAL USD\"] || 0;\n    const maxUsd = data[\"MAX HIST USD\"] || actualUsd;\n    \n    const numCupPrice = Number(actualCup);\n    \n    if (numCupPrice > 45000 && data.html) {\n        \n        const formatUsd = (val) => {\n            const num = Number(val);\n            if (isNaN(num) || num <= 0) return '0 USD';\n            return '$' + (num % 1 === 0 ? num.toFixed(0) : num.toFixed(2)) + ' USD';\n        };\n        const usdPrice = formatUsd(actualUsd);\n        const isUsdDiscount = (maxUsd > actualUsd);\n        \n        let newFooterHtml = '';\n        let cleanHtml = data.html;\n        \n        if (isUsdDiscount) {\n            const diffUsdVal = maxUsd - actualUsd;\n            const oldUsdStr = formatUsd(maxUsd);\n            const diffUsdStr = formatUsd(diffUsdVal);\n            \n            newFooterHtml = `\n            <div class=\"price-container\" style=\"justify-content: center; align-items: baseline; gap: 20px;\">\n                <span class=\"old-price\" style=\"font-size: 38px; color: #A0A0A0; text-decoration: line-through;\">${oldUsdStr}</span>\n                <span class=\"price-val\" style=\"font-size: 75px; color: #e87b04;\">${usdPrice}</span>\n            </div>`;\n            \n            cleanHtml = cleanHtml.replace(/<div class=\"price-container\">[\\s\\S]*?<\\/div>/, newFooterHtml);\n            \n            const newBannerHtml = `\n            <div class=\"discount-banner\">\n                <span class=\"banner-title\">AHORRAS</span>\n                <span class=\"banner-amounts\">${diffUsdStr}</span>\n            </div>`;\n            cleanHtml = cleanHtml.replace(/<div class=\"discount-banner\">[\\s\\S]*?<\\/div>/, newBannerHtml);\n            \n        } else {\n            newFooterHtml = `\n            <div class=\"price-container\" style=\"justify-content: center;\">\n                <span class=\"price-val\" style=\"font-size: 80px; color: #e87b04;\">${usdPrice}</span>\n            </div>`;\n            \n            cleanHtml = cleanHtml.replace(/<div class=\"price-container\">[\\s\\S]*?<\\/div>/, newFooterHtml);\n            cleanHtml = cleanHtml.replace(/<div class=\"discount-banner\">[\\s\\S]*?<\\/div>/, '');\n        }\n        \n        data.html = cleanHtml;\n    }\n    \n    return { json: data };\n});"
+      },
+      "id": "c99c1a6d-85bc-4a1b-adb4-625210c837b4",
+      "name": "⭐ Diseño Premium USD (Temporal)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        -336
+      ]
+    }
+  ],
+  "connections": {
+    "🔀 ¿Qué Marca es?": {
+      "main": [
+        [
+          {
+            "node": "🎨 Preparar HTML YourBrand",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🎨 Preparar HTML YourDulceria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📥 Recibir Petición de Diseño": {
+      "main": [
+        [
+          {
+            "node": "📥 Descargar de Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📥 Descargar de Drive": {
+      "main": [
+        [
+          {
+            "node": "🧠 Procesar a Base64 (Fidelidad Local)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧠 Procesar a Base64 (Fidelidad Local)": {
+      "main": [
+        [
+          {
+            "node": "🔀 ¿Qué Marca es?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🎨 Preparar HTML YourBrand": {
+      "main": [
+        [
+          {
+            "node": "⭐ Diseño Premium USD (Temporal)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⭐ Diseño Premium USD (Temporal)": {
+      "main": [
+        [
+          {
+            "node": "📸 Renderizar Imagen Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🎨 Preparar HTML YourDulceria": {
+      "main": [
+        [
+          {
+            "node": "📸 Renderizar Imagen Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "3b8e6361-b6b2-432d-b705-058ba836f761",
+  "activeVersionId": "3b8e6361-b6b2-432d-b705-058ba836f761",
+  "versionCounter": 279,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-04-10T18:59:54.663Z",
+      "createdAt": "2026-04-10T18:59:54.663Z",
+      "role": "workflow:owner",
+      "workflowId": "RLVkKKWYAp51LXtL",
+      "projectId": "ms8tH4wh3FFjxTYT",
+      "project": {
+        "updatedAt": "2026-04-10T09:30:13.916Z",
+        "createdAt": "2026-04-10T09:12:09.604Z",
+        "id": "ms8tH4wh3FFjxTYT",
+        "name": "alvaro ruiz <yourbrandredes@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "51ee2f38-a3fc-4b00-b883-60cca3d92c58"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-11T20:46:47.783Z",
+    "createdAt": "2026-05-11T20:46:47.783Z",
+    "versionId": "3b8e6361-b6b2-432d-b705-058ba836f761",
+    "workflowId": "RLVkKKWYAp51LXtL",
+    "nodes": [
+      {
+        "parameters": {},
+        "name": "📥 Recibir Petición de Diseño",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1,
+        "position": [
+          -272,
+          -192
+        ],
+        "notesInFlow": true,
+        "id": "b87586d0-31cb-4c0b-93cf-2699d579f49c",
+        "notes": "Recibe los datos crudos y los precios desde el flujo principal para iniciar el proceso de diseño."
+      },
+      {
+        "parameters": {
+          "dataType": "string",
+          "value1": "={{ $json.marca }}",
+          "rules": {
+            "rules": [
+              {
+                "value2": "yourbrand"
+              },
+              {
+                "value2": "yourdulceria"
+              }
+            ]
+          }
+        },
+        "name": "🔀 ¿Qué Marca es?",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 1,
+        "position": [
+          352,
+          -224
+        ],
+        "notesInFlow": true,
+        "id": "da713eb9-b218-4599-b99b-31a56a7882de",
+        "notes": "Dirige la foto a su plantilla HTML correspondiente."
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $input.first().json;\nconst logoMime = item.logoMime || 'image/jpeg';\nconst logoBase64 = item.logoBase64 || '';\nconst productoMime = item.productoMime || 'image/jpeg';\nconst productoBase64 = item.productoBase64 || '';\nconst productId = item.productId || 'PRODUCTO';\nconst descripcion = (item.DESCRIPCION || item.DESCRIPCIÓN) ? String(item.DESCRIPCION || item.DESCRIPCIÓN).trim() : '';\nconst hasSpecs = descripcion.length > 0;\nconst SPEC_AREA = 150;\n\n// Lógica de Mensaje Gancho Unificada\nconst ganchos = {\n  \"ROPA\": [\"💜 Tu mejor estilo. Precio justo.\", \"🛡️ Inversión inteligente para tu armario.\", \"⚡ Presencia total. Cero especulación.\", \"🔄 Renueva tu imagen. Calidad que dura.\", \"🎯 Exclusividad diaria a tu alcance.\"],\n  \"ZAPATOS\": [\"✨ Comodidad y elegancia en cada paso.\", \"🛡️ Hechos para durar y destacar.\", \"⚡ Pisa fuerte. Calidad que ahorra.\", \"⚖️ Soporte total. Cero especulación.\", \"🏆 Pasos firmes, inversión segura.\"],\n  \"CARTERAS\": [\"🎒 Espacio y diseño a tu medida.\", \"🛡️ Resistencia diaria, elegancia total.\", \"🎯 Funcionalidad y estilo a precio justo.\", \"💎 Lujo y orden en tus manos.\", \"🌟 Excelencia en cada costura.\"],\n  \"TECNOLOGIA\": [\"🚀 Moderniza tu vida sin pagar de más.\", \"⚡ Rendimiento total. 100% innovación.\", \"🛡️ Máxima potencia, ahorro inteligente.\", \"🌐 El futuro en tus manos, hoy.\", \"🔋 Tecnología real. Paga lo justo.\"],\n  \"ACCESORIOS\": [\"✨ El detalle que lo cambia todo.\", \"🎯 Gran impacto, inversión mínima.\", \"💎 Exclusividad que eleva tu imagen.\", \"💜 Calidad que se nota al instante.\", \"👑 Elegancia pura, precio sin trucos.\"]\n};\nlet copyText = item.copyText;\nif (!copyText) {\n    const cat = item.CATEGORÍA || item.category || item.categoryRaw || 'GENERAL';\n    const opts = ganchos[cat.toUpperCase()];\n    copyText = (opts && opts.length > 0) ? opts[Math.floor(Math.random() * opts.length)] : '🛍️ CALIDAD Y ESTILO AL MEJOR PRECIO ✨';\n}\n\n// CORRECCIÓN DEFINITIVA: Solo los productos en la hoja manual (specialSale) \n// reciben el color verde y el texto \"REBAJA ESPECIAL\".\nif (item.specialSale === true) {\n    copyText = 'REBAJA ESPECIAL';\n}\nconst talla = item.talla || '';\n\n// --- 1. EXTRACCIÓN ROBUSTA DE DATOS ---\nconst actualCup = item.cupPrice || item[\"ACTUAL CUP\"] || 0;\nconst actualUsd = item.usdPrice || item[\"ACTUAL USD\"] || 0;\nconst maxCup = item[\"MAX HIST CUP\"] || actualCup;\nconst maxUsd = item[\"MAX HIST USD\"] || actualUsd;\n\nconst cupRaw = Math.ceil(Number(actualCup));\nconst cupPrice = cupRaw > 0 ? '$' + cupRaw.toLocaleString('en-US') + ' CUP' : '0 CUP';\nconst formatUsd = (val) => {\n    const num = Number(val);\n    if (isNaN(num) || num <= 0) return '0 USD';\n    return '$' + (num % 1 === 0 ? num.toFixed(0) : num.toFixed(2)) + ' USD';\n};\nconst usdPrice = formatUsd(actualUsd);\n\n// La visibilidad del banner rojo central depende de isSale (Cualquier rebaja)\nconst isCupDiscount = (maxCup > actualCup);\nconst isUsdDiscount = (maxUsd > actualUsd);\nconst isDiscountValid = isCupDiscount || isUsdDiscount;\n\n// --- 2. LÓGICA DINÁMICA DE LAYOUT ---\nconst footerHeight = isDiscountValid ? 440 : 320;\nconst finalFooterHeight = hasSpecs ? footerHeight + SPEC_AREA : footerHeight;\nconst productAreaHeight = 1440 - finalFooterHeight;\nconst productImgMaxHeight = productAreaHeight - 40; \n\n// --- 3. CONSTRUCCIÓN DE COMPONENTES DINÁMICOS ---\nlet priceHtml = '';\nlet bannerHtml = '';\n\nif (isDiscountValid) {\n    let oldCupHtml = '';\n    let oldUsdHtml = '';\n    let bannerAmountsStr = '';\n\n    if (isCupDiscount) {\n        const diffCupVal = maxCup - actualCup;\n        const oldCupStr = '$' + Math.ceil(maxCup).toLocaleString('en-US') + ' CUP';\n        const diffCupStr = '$' + Math.ceil(diffCupVal).toLocaleString('en-US') + ' CUP';\n        oldCupHtml = '<span class=\"old-price\">' + oldCupStr + '</span>';\n        bannerAmountsStr += diffCupStr;\n    }\n\n    if (isUsdDiscount) {\n        const diffUsdVal = maxUsd - actualUsd;\n        const oldUsdStr = formatUsd(maxUsd);\n        const diffUsdStr = formatUsd(diffUsdVal);\n        oldUsdHtml = '<span class=\"old-price\">' + oldUsdStr + '</span>';\n        if (isCupDiscount) bannerAmountsStr += ' <span class=\"banner-sep\">/</span> ' + diffUsdStr;\n        else bannerAmountsStr += diffUsdStr;\n    }\n\n    priceHtml = '<div class=\"price-container\">' +\n        '<span class=\"price-val\">' + cupPrice + '</span>' +\n        oldCupHtml +\n        '<span class=\"price-sep\">/</span>' +\n        '<span class=\"price-val\">' + usdPrice + '</span>' +\n        oldUsdHtml +\n    '</div>';\n\n    bannerHtml = '<div class=\"discount-banner\">' +\n        '<span class=\"banner-title\">AHORRAS</span>' +\n        '<span class=\"banner-amounts\">' + bannerAmountsStr + '</span>' +\n    '</div>';\n} else {\n    priceHtml = '<div class=\"price-container\"><span class=\"price-val\">' + cupPrice + '</span><span class=\"price-sep\">/</span><span class=\"price-val\">' + usdPrice + '</span></div>';\n}\n\nlet tallaHtml = '';\nif (talla) {\n    tallaHtml = '<div class=\"talla-tag\"><span class=\"talla-label\">Talla: </span><span class=\"talla-val\">' + talla + '</span></div>';\n}\nlet specsHtml = '';\nif (hasSpecs) {\n    const specTop = isDiscountValid ? '335px' : '215px';\n    specsHtml = '<div class=\"spec-block\" style=\"top: ' + specTop + '; height: 150px;\">' + descripcion + '</div>';\n}\n\n// --- 4. RENDERIZADO DOM & CSS ---\nconst html = '<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"UTF-8\"><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link href=\"https://fonts.googleapis.com/css2?family=Archivo+Black&family=Open+Sans:wght@200;400;600;700;800;900&display=swap\" rel=\"stylesheet\"><style>' +\n'* { margin: 0; padding: 0; box-sizing: border-box; } ' +\n'body, html { width: 1080px; height: 1440px; overflow: hidden; background-color: #6d1e68; font-family: \"Open Sans\", sans-serif; } ' +\n'.main-canvas { width: 1080px; height: 1440px; display: flex; flex-direction: column; position: relative; } ' +\n'.logo-raw { position: absolute; top: 50px; left: 50px; width: 180px; z-index: 100; } ' +\n'.product-area { position: absolute; top: 0; left: 0; width: 1080px; height: ' + productAreaHeight + 'px; display: flex; justify-content: center; align-items: center; padding: 20px; } ' +\n'.product-img { max-width: 1040px; max-height: ' + productImgMaxHeight + 'px; object-fit: contain; filter: drop-shadow(0px 35px 65px rgba(0,0,0,0.55)); } ' +\n'.info-footer { position: absolute; bottom: 0; left: 0; width: 1080px; height: ' + finalFooterHeight + 'px; background-color: #ffffff; box-shadow: 0px -15px 40px rgba(0,0,0,0.2); z-index: 10; } ' +\n'.divider-img { position: absolute; top: 0; left: 5%; width: 90%; height: 3px; background: linear-gradient(90deg, rgba(160,160,160,0) 0%, rgba(160,160,160,0.6) 50%, rgba(160,160,160,0) 100%); z-index: 15; } ' +\n'.top-left-block { position: absolute; top: 25px; left: 30px; display: flex; flex-direction: column; align-items: flex-start; } ' +\n'.name-tag { font-family: \"Open Sans\", sans-serif; font-size: 38px; font-weight: 900; color: #000000; text-decoration: underline; max-width: 1020px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; line-height: 1.1; text-transform: uppercase; } ' +\n'.talla-tag { margin-top: 5px; } ' +\n'.talla-label { font-family: \"Open Sans\", sans-serif; font-size: 32px; font-weight: 700; color: #333333; } ' +\n'.talla-val { font-family: \"Open Sans\", sans-serif; font-size: 32px; font-weight: 700; color: #555555; } ' +\n'.divider-title { position: absolute; top: 110px; left: 5%; width: 90%; height: 3px; background: linear-gradient(90deg, rgba(160,160,160,0) 0%, rgba(160,160,160,0.6) 50%, rgba(160,160,160,0) 100%); z-index: 15; } ' +\n'.center-block { position: absolute; top: 135px; left: 50%; transform: translateX(-50%); width: 100%; display: flex; justify-content: center; align-items: center; } ' +\n'.price-container { display: flex; align-items: baseline; gap: 12px; } ' +\n'.price-val { font-family: \"Archivo Black\", sans-serif; font-size: 52px; font-weight: 900; color: #e87b04; line-height: 0.85; white-space: nowrap; text-shadow: 2px 3px 4px rgba(0,0,0,0.2); } ' +\n'.old-price { font-family: \"Open Sans\", sans-serif; font-size: 30px; color: #999999; text-decoration: line-through; text-decoration-thickness: 3px; font-weight: 700; white-space: nowrap; margin-bottom: -2px; } ' +\n'.price-sep { font-family: \"Open Sans\", sans-serif; font-size: 70px; font-weight: 200; color: #e87b04; margin: 0 10px; line-height: 0.8; text-shadow: 1px 2px 3px rgba(0,0,0,0.1); } ' +\n'.discount-banner { position: absolute; top: 260px; left: 0; width: 1080px; background: linear-gradient(90deg, #d32f2f 0%, #f44336 50%, #d32f2f 100%); color: #ffffff; display: flex; justify-content: center; align-items: center; padding: 6px 0; z-index: 20; box-shadow: 0px 4px 15px rgba(0,0,0,0.15); gap: 20px; } ' +\n'.banner-title { font-family: \"Archivo Black\", sans-serif; font-size: 34px; text-transform: uppercase; letter-spacing: 2px; } ' +\n'.banner-amounts { font-family: \"Archivo Black\", sans-serif; font-size: 45px; display: flex; align-items: center; text-shadow: 2px 3px 6px rgba(0,0,0,0.45); } ' +\n'.banner-sep { font-weight: 200; font-size: 55px; margin: 0 10px; font-family: \"Open Sans\", sans-serif; } ' +\n'.slogan-tag { position: absolute; bottom: 25px; left: 0; width: 100%; font-family: \"Open Sans\", sans-serif; font-size: 34px; font-weight: 800; color: #444444; text-align: center; text-transform: uppercase; }' +\n'.slogan-tag.rebaja { background: #2e7d32; color: #ffffff; width: auto; left: 50%; transform: translateX(-50%); padding: 12px 40px; border-radius: 12px; font-weight: 900; letter-spacing: 2px; box-shadow: 0px 4px 10px rgba(0,0,0,0.2); }' +\n'.spec-block { position: absolute; left: 0; width: 100%; display: flex; justify-content: center; align-items: center; padding: 0 60px; font-family: \"Open Sans\", sans-serif; font-size: 26px; font-weight: 600; color: #333333; text-align: center; line-height: 1.5; word-wrap: break-word; overflow-wrap: break-word; } ' +\n'</style></head><body><div class=\"main-canvas\">' +\n'<img src=\"data:' + logoMime + ';base64,' + logoBase64 + '\" class=\"logo-raw\" />' +\n'<div class=\"product-area\"><img src=\"data:' + productoMime + ';base64,' + productoBase64 + '\" class=\"product-img\" /></div>' +\n'<div class=\"info-footer\">' +\n'<div class=\"divider-img\"></div>' +\n'<div class=\"top-left-block\"><div class=\"name-tag\">' + productId + '</div>' + tallaHtml + '</div>' +\n'<div class=\"divider-title\"></div>' +\n'<div class=\"center-block\">' + priceHtml + '</div>' +\n'<div class=\"divider-bottom\"></div>' +\nbannerHtml +\nspecsHtml +\n'<div class=\"slogan-tag' + (item.specialSale === true ? ' rebaja' : '') + '\">' + copyText + '</div></div></div>' +\n'<script>' +\n'function fitText() {' +\n'  const pContainer = document.querySelector(\".price-container\");' +\n'  if (pContainer && pContainer.offsetWidth > 1000) {' +\n'    const ratio = 1000 / pContainer.offsetWidth;' +\n'    pContainer.style.transform = \"scale(\" + ratio + \")\";' +\n'    pContainer.style.transformOrigin = \"center center\";' +\n'  }' +\n'}' +\n'window.onload = fitText;' +\n'</script></body></html>';\n\nreturn [{ json: { ...item, html: html } }];"
+        },
+        "name": "🎨 Preparar HTML YourBrand",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          592,
+          -336
+        ],
+        "notesInFlow": true,
+        "id": "625eb7a1-e5bf-420c-88be-d2bb93b1f023",
+        "notes": "Inyecta la tipografía de YourBrand, los precios y crea la plantilla web."
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $input.first().json; \nconst html = '<html><body style=\"width:1200px;height:1200px;background:#600000;margin:0;display:flex;flex-direction:column;\"><div style=\"flex:1;display:flex;justify-content:center;align-items:center;\"><img src=\"data:' + item.productoMime + ';base64,' + item.productoBase64 + '\" style=\"max-height:900px;object-fit:contain;\"></div><div style=\"background:#C5A059;padding:40px;text-align:center;\"><h1 style=\"font-size:58px;color:#3d0000;\">' + item.productId + '</h1><div style=\"background:#3d0000;color:#C5A059;padding:15px;border-radius:100px;font-size:72px;\">' + (item.cupFormatted || item.cupPrice + ' CUP') + '</div></div></body></html>'; \nreturn [{ json: { ...item, html: html } }];"
+        },
+        "name": "🎨 Preparar HTML YourDulceria",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          608,
+          112
+        ],
+        "notesInFlow": true,
+        "id": "a9f761fa-3287-444c-9786-98bd3f15b07b",
+        "notes": "Inyecta la tipografía de YourDulceria y crea la plantilla web."
+      },
+      {
+        "parameters": {
+          "html": "={{ $json.html }}"
+        },
+        "name": "📸 Renderizar Imagen Final",
+        "type": "n8n-nodes-html2image.html2image",
+        "typeVersion": 1,
+        "position": [
+          1008,
+          -16
+        ],
+        "notesInFlow": true,
+        "id": "0696e7bc-f1f8-4b8b-9d82-87baf64405ae",
+        "notes": "Transforma el código web (HTML) en una imagen PNG plana y pesada (El diseño final del producto)."
+      },
+      {
+        "parameters": {
+          "authentication": "serviceAccount",
+          "operation": "download",
+          "fileId": {
+            "value": "={{ $json.driveFileId }}",
+            "mode": "id"
+          },
+          "options": {}
+        },
+        "id": "7168be4e-d205-4b64-9643-89a237f04105",
+        "name": "📥 Descargar de Drive",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [
+          -96,
+          -192
+        ],
+        "credentials": {
+          "googleApi": {
+            "id": "j7hN33tnv2xadMZJ",
+            "name": "Google Sheets account 4"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const fs = require('fs');\nconst items = $input.all();\nif (items.length === 0) return [];\n\nconst item = items[0].json;\n\n// Obtener el buffer real descargado de Drive\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n\nconst logoPath = '/data/logo.png';\nlet logoBase64 = '';\nlet logoMime = 'image/png';\n\ntry {\n    const logoBuffer = fs.readFileSync(logoPath);\n    logoBase64 = logoBuffer.toString('base64');\n    if (logoPath.endsWith('.jpeg') || logoPath.endsWith('.jpg')) logoMime = 'image/jpeg';\n} catch (e) {\n    // Logo fallback silencioso\n}\n\nreturn [{\n    json: {\n        ...item,\n        productoBase64: buffer.toString('base64'),\n        productoMime: items[0].binary.data.mimeType || 'image/jpeg',\n        logoBase64: logoBase64,\n        logoMime: logoMime\n    }\n}];"
+        },
+        "id": "505d69bb-cc37-466c-9a3d-f5c9018bc982",
+        "name": "🧠 Procesar a Base64 (Fidelidad Local)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          96,
+          -192
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n    const data = item.json;\n    \n    const actualCup = data.cupPrice || data[\"ACTUAL CUP\"] || 0;\n    const actualUsd = data.usdPrice || data[\"ACTUAL USD\"] || 0;\n    const maxUsd = data[\"MAX HIST USD\"] || actualUsd;\n    \n    const numCupPrice = Number(actualCup);\n    \n    if (numCupPrice > 45000 && data.html) {\n        \n        const formatUsd = (val) => {\n            const num = Number(val);\n            if (isNaN(num) || num <= 0) return '0 USD';\n            return '$' + (num % 1 === 0 ? num.toFixed(0) : num.toFixed(2)) + ' USD';\n        };\n        const usdPrice = formatUsd(actualUsd);\n        const isUsdDiscount = (maxUsd > actualUsd);\n        \n        let newFooterHtml = '';\n        let cleanHtml = data.html;\n        \n        if (isUsdDiscount) {\n            const diffUsdVal = maxUsd - actualUsd;\n            const oldUsdStr = formatUsd(maxUsd);\n            const diffUsdStr = formatUsd(diffUsdVal);\n            \n            newFooterHtml = `\n            <div class=\"price-container\" style=\"justify-content: center; align-items: baseline; gap: 20px;\">\n                <span class=\"old-price\" style=\"font-size: 38px; color: #A0A0A0; text-decoration: line-through;\">${oldUsdStr}</span>\n                <span class=\"price-val\" style=\"font-size: 75px; color: #e87b04;\">${usdPrice}</span>\n            </div>`;\n            \n            cleanHtml = cleanHtml.replace(/<div class=\"price-container\">[\\s\\S]*?<\\/div>/, newFooterHtml);\n            \n            const newBannerHtml = `\n            <div class=\"discount-banner\">\n                <span class=\"banner-title\">AHORRAS</span>\n                <span class=\"banner-amounts\">${diffUsdStr}</span>\n            </div>`;\n            cleanHtml = cleanHtml.replace(/<div class=\"discount-banner\">[\\s\\S]*?<\\/div>/, newBannerHtml);\n            \n        } else {\n            newFooterHtml = `\n            <div class=\"price-container\" style=\"justify-content: center;\">\n                <span class=\"price-val\" style=\"font-size: 80px; color: #e87b04;\">${usdPrice}</span>\n            </div>`;\n            \n            cleanHtml = cleanHtml.replace(/<div class=\"price-container\">[\\s\\S]*?<\\/div>/, newFooterHtml);\n            cleanHtml = cleanHtml.replace(/<div class=\"discount-banner\">[\\s\\S]*?<\\/div>/, '');\n        }\n        \n        data.html = cleanHtml;\n    }\n    \n    return { json: data };\n});"
+        },
+        "id": "c99c1a6d-85bc-4a1b-adb4-625210c837b4",
+        "name": "⭐ Diseño Premium USD (Temporal)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1056,
+          -336
+        ]
+      }
+    ],
+    "connections": {
+      "🔀 ¿Qué Marca es?": {
+        "main": [
+          [
+            {
+              "node": "🎨 Preparar HTML YourBrand",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "🎨 Preparar HTML YourDulceria",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "📥 Recibir Petición de Diseño": {
+        "main": [
+          [
+            {
+              "node": "📥 Descargar de Drive",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "📥 Descargar de Drive": {
+        "main": [
+          [
+            {
+              "node": "🧠 Procesar a Base64 (Fidelidad Local)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🧠 Procesar a Base64 (Fidelidad Local)": {
+        "main": [
+          [
+            {
+              "node": "🔀 ¿Qué Marca es?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🎨 Preparar HTML YourBrand": {
+        "main": [
+          [
+            {
+              "node": "⭐ Diseño Premium USD (Temporal)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⭐ Diseño Premium USD (Temporal)": {
+        "main": [
+          [
+            {
+              "node": "📸 Renderizar Imagen Final",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🎨 Preparar HTML YourDulceria": {
+        "main": [
+          [
+            {
+              "node": "📸 Renderizar Imagen Final",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "alvaro ruiz",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-28T19:46:29.115Z",
+        "id": 78,
+        "workflowId": "RLVkKKWYAp51LXtL",
+        "versionId": "3b8e6361-b6b2-432d-b705-058ba836f761",
+        "event": "activated",
+        "userId": "51ee2f38-a3fc-4b00-b883-60cca3d92c58"
+      }
+    ]
+  }
+}

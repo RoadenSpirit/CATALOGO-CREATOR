@@ -67,7 +67,7 @@ function resolveWorkflowIdFromEnv(value) {
 }
 
 // Propiedades que el API de n8n acepta en PUT /workflows/:id (no enviar más).
-const ALLOWED_TOP_LEVEL = ['name', 'nodes', 'connections', 'settings', 'staticData', 'shared'];
+const ALLOWED_TOP_LEVEL = ['name', 'nodes', 'connections', 'settings', 'staticData'];
 
 // Dentro de settings el API solo acepta estas claves (binaryMode, availableInMCP, etc. dan 400).
 const ALLOWED_SETTINGS = [
